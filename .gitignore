@@ -5,8 +5,12 @@
 *.token
 
 # Supabase backup output directories
-edge_functions_backup/
+edge_functions_backup_*/
 backups/
+
+# Supabase backup artefacts (in case --dir points somewhere custom)
+*.eszip
+manifest.json
 
 # Python
 __pycache__/
