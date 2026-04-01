@@ -21,8 +21,8 @@ A collection of Python scripts and tools for managing, automating, and maintaini
 ## 🔑 How to Get Your Token
 
 1. Log in to [supabase.com](https://supabase.com)
-2. Click your **avatar** (top-right) → **Account**
-3. Go to [Account → Access Tokens](https://supabase.com/dashboard/account/tokens)
+2. Click your **avatar** (top-right) → **Account Preferences**
+3. Go to [Account Preferences → Access Tokens](https://supabase.com/dashboard/account/tokens)
 4. Click **Generate new token**, give it a descriptive name (e.g. `backup-tool`), and copy the value
 
 > ⚠️ The token is shown **only once** — copy it immediately and store it somewhere safe (e.g. a password manager or a local `.env` file).

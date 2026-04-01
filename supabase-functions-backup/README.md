@@ -13,21 +13,10 @@ The tool talks to the [Supabase Management API](https://supabase.com/docs/refere
 
 - 🐍 **Python 3.8+**
 - 🌐 **`requests` library** — `pip install requests`
-- 🔑 **Supabase Personal Access Token (PAT)** — see [🔑 How to Get Your Token](#-how-to-get-your-token) below
+- 🔑 **Supabase Personal Access Token (PAT)** — see [🔑 How to Get Your Token](../README.md#-how-to-get-your-token) in the root README
 - 🆔 **Supabase Project Reference ID** — the alphanumeric string in your project dashboard URL:
   `https://supabase.com/dashboard/project/abcdefghijklmnop` → ref is `abcdefghijklmnop`
   Also visible under *Project Settings → General*.
-
-## 🔑 How to Get Your Token
-
-1. Log in to [supabase.com](https://supabase.com)
-2. Click your **avatar** (top-right) → **Account**
-3. Go to [Account → Access Tokens](https://supabase.com/dashboard/account/tokens)
-4. Click **Generate new token**, give it a name (e.g. `backup-tool`), and copy the value
-
-> ⚠️ The token is shown **only once** — copy it immediately and store it somewhere safe (e.g. a password manager or `.env` file).
->
-> 🔒 This is an **account-level** token with access to **all projects** in your Supabase account. Treat it like a password and never commit it to version control.
 
 ## 🚀 Quick Start
 
