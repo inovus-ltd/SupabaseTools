@@ -53,7 +53,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 
 MANAGEMENT_API_BASE = "https://api.supabase.com/v1"
-DEFAULT_BACKUP_DIR = "edge_functions_backup"
+DEFAULT_BACKUP_DIR_PREFIX = "edge_functions_backup"
 
 # The Management API allows 120 requests/min per project. We add a small
 # courtesy delay between calls to stay well within limits.
@@ -261,7 +261,7 @@ def do_restore(
     Restore Edge Functions from a backup directory to the target project.
 
     If --slugs is provided, only those functions will be restored.
-    If --dry-run is set, nothing is actually deployed -- just a preview.
+    If --dry-run is set, nothing is actually deployed — just a preview.
     """
     root = Path(backup_dir)
     manifest_path = root / "manifest.json"
@@ -305,7 +305,7 @@ def do_restore(
         meta_path = fn_dir / "metadata.json"
 
         if not body_path.exists():
-            print(f"  SKIP {slug} -- source bundle not found at {body_path}")
+            print(f"  SKIP {slug} — source bundle not found at {body_path}")
             continue
 
         meta = {}
@@ -436,8 +436,12 @@ Environment variables:
     )
     bp.add_argument(
         "--dir",
-        default=DEFAULT_BACKUP_DIR,
-        help=f"Directory to save backups into (default: {DEFAULT_BACKUP_DIR}).",
+        default=None,
+        help=(
+            "Directory to save backups into. "
+            f"Defaults to {DEFAULT_BACKUP_DIR_PREFIX}_<project-ref> so each project "
+            "gets its own folder automatically."
+        ),
     )
 
     # -- restore --
@@ -448,8 +452,11 @@ Environment variables:
     )
     rp.add_argument(
         "--dir",
-        default=DEFAULT_BACKUP_DIR,
-        help=f"Directory containing the backup (default: {DEFAULT_BACKUP_DIR}).",
+        default=None,
+        help=(
+            "Directory containing the backup to restore from. "
+            f"Defaults to {DEFAULT_BACKUP_DIR_PREFIX}_<project-ref>."
+        ),
     )
     rp.add_argument(
         "--slugs",
@@ -502,14 +509,18 @@ def main():
 
     api = SupabaseManagementAPI(args.token)
 
+    # Resolve --dir default to a project-scoped folder so each project's
+    # backup lives in its own directory and can't be confused with another.
+    backup_dir = args.dir if args.dir else f"{DEFAULT_BACKUP_DIR_PREFIX}_{args.project_ref}"
+
     if args.command == "backup":
-        do_backup(api, args.project_ref, args.dir)
+        do_backup(api, args.project_ref, backup_dir)
 
     elif args.command == "restore":
         do_restore(
             api,
             args.project_ref,
-            args.dir,
+            backup_dir,
             slugs=args.slugs,
             dry_run=args.dry_run,
         )

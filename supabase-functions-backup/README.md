@@ -40,7 +40,7 @@ python supabase-functions-backup.py backup [options]
 |-----------|----------|---------|-------------|
 | `--project-ref` | ✅ Yes* | `SUPABASE_PROJECT_REF` env var | Your Supabase project reference ID |
 | `--token` | ✅ Yes* | `SUPABASE_ACCESS_TOKEN` env var | Your Supabase Personal Access Token |
-| `--dir` | No | `edge_functions_backup` | Path to the directory to save the backup into. Created automatically if it doesn't exist. Accepts relative or absolute paths. |
+| `--dir` | No | `edge_functions_backup_<project-ref>` | Path to the directory to save the backup into. Defaults to a folder named after your project ref so each project gets its own isolated backup. Created automatically if it doesn't exist. Accepts relative or absolute paths. |
 
 ```bash
 # Relative path (macOS / Linux)
@@ -68,7 +68,7 @@ python supabase-functions-backup.py restore [options]
 |-----------|----------|---------|-------------|
 | `--project-ref` | ✅ Yes* | `SUPABASE_PROJECT_REF` env var | Target project to restore functions into |
 | `--token` | ✅ Yes* | `SUPABASE_ACCESS_TOKEN` env var | Your Supabase Personal Access Token |
-| `--dir` | No | `edge_functions_backup` | Path to the directory containing the backup to restore from. Accepts relative or absolute paths. |
+| `--dir` | No | `edge_functions_backup_<project-ref>` | Path to the directory containing the backup to restore from. Defaults to the same project-scoped folder that `backup` writes to, so `restore` will automatically read from the right place. Accepts relative or absolute paths. |
 | `--slugs` | No | *(all functions)* | Space-separated list of function slugs to restore — omit to restore everything |
 | `--dry-run` | No | `false` | Preview what would be deployed without making any changes |
 
@@ -144,8 +144,10 @@ python supabase-functions-backup.py list
 
 ## 🗂️ Backup Directory Structure
 
+By default each project's backup is saved to its own folder named `edge_functions_backup_<project-ref>`, so running backup for multiple projects will never overwrite each other:
+
 ```
-edge_functions_backup/
+edge_functions_backup_abcdefghijklmnop/
   manifest.json              # Backup timestamp, source project, function list
   hello-world/
     metadata.json            # Full function config from the API
