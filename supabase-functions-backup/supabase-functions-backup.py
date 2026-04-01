@@ -246,8 +246,8 @@ def do_backup(api: SupabaseManagementAPI, project_ref: str, backup_dir: str):
     print(f"  Manifest: {manifest_path.resolve()}")
     print(f"\n  To restore these functions:")
     print(f"    Same project:      python supabase-functions-backup.py restore --project-ref {project_ref}")
-    print(f"    Different project: python supabase-functions-backup.py restore --project-ref <target-ref> --dir {root.resolve()}")
-    print(f"    e.g.               python supabase-functions-backup.py restore --project-ref abcdefghijklmnop --dir {root.resolve()}")
+    print(f"    Different project: python supabase-functions-backup.py restore --project-ref <target-ref> --dir {root}")
+    print(f"    e.g.               python supabase-functions-backup.py restore --project-ref abcdefghijklmnop --dir {root}")
     print()
 
 
@@ -332,13 +332,12 @@ def do_restore(
         if meta_path.exists():
             meta = json.loads(meta_path.read_text())
 
-        # Merge manifest-level info with file-level metadata. The file-level
-        # metadata is more detailed, but manifest has the essentials too.
+        raw_entrypoint = meta.get("entrypoint_path", fn_info.get("entrypoint_path", "index.ts"))
+        entrypoint_path = Path(raw_entrypoint.replace("file://", "")).name or "index.ts"
+
         deploy_meta = {
             "name": meta.get("name", fn_info.get("name", slug)),
-            "entrypoint_path": meta.get(
-                "entrypoint_path", fn_info.get("entrypoint_path", "index.ts")
-            ),
+            "entrypoint_path": entrypoint_path,
             "verify_jwt": meta.get(
                 "verify_jwt", fn_info.get("verify_jwt", True)
             ),
