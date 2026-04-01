@@ -6,7 +6,7 @@ A collection of Python scripts and tools for managing, automating, and maintaini
 
 | Tool | Description |
 |------|-------------|
-| [`supabase-backup`](./supabase-backup/README.md) | Backup and restore Supabase Edge Functions using the Management API |
+| [`supabase-functions-backup`](./supabase-functions-backup/README.md) | Backup and restore Supabase Edge Functions using the Management API |
 
 ## Prerequisites
 

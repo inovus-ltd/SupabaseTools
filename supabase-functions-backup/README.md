@@ -33,7 +33,7 @@ The tool talks to the [Supabase Management API](https://supabase.com/docs/refere
 ### 1. Back up all functions from a project
 
 ```bash
-python supabase-backup.py backup \
+python supabase-functions-backup.py backup \
   --project-ref abcdefghijklmnop \
   --token sbp_xxxxxxxxxxxxxxxxxxxx
 ```
@@ -45,7 +45,7 @@ This creates an `edge_functions_backup/` directory containing a manifest and one
 ### 2. List functions (without downloading)
 
 ```bash
-python supabase-backup.py list \
+python supabase-functions-backup.py list \
   --project-ref your-project-ref \
   --token sbp_your_token_here
 ```
@@ -53,7 +53,7 @@ python supabase-backup.py list \
 ### 3. Restore to a different project
 
 ```bash
-python supabase-backup.py restore \
+python supabase-functions-backup.py restore \
   --project-ref target-project-ref \
   --token sbp_your_token_here
 ```
@@ -61,7 +61,7 @@ python supabase-backup.py restore \
 ### 4. Restore only specific functions
 
 ```bash
-python supabase-backup.py restore \
+python supabase-functions-backup.py restore \
   --project-ref target-project-ref \
   --token sbp_your_token_here \
   --slugs send-email process-webhook
@@ -70,7 +70,7 @@ python supabase-backup.py restore \
 ### 5. Dry run (preview without deploying)
 
 ```bash
-python supabase-backup.py restore \
+python supabase-functions-backup.py restore \
   --project-ref target-project-ref \
   --dry-run
 ```
@@ -84,8 +84,8 @@ export SUPABASE_ACCESS_TOKEN=sbp_your_token_here
 export SUPABASE_PROJECT_REF=your-project-ref
 
 # Now just:
-python supabase-backup.py backup
-python supabase-backup.py list
+python supabase-functions-backup.py backup
+python supabase-functions-backup.py list
 ```
 
 ## Backup Directory Structure
@@ -114,10 +114,10 @@ Use `--dir` to control where backups are saved or read from:
 
 ```bash
 # Save to a specific location
-python supabase-backup.py backup --dir ./backups/2025-03-11
+python supabase-functions-backup.py backup --dir ./backups/2025-03-11
 
 # Restore from that location
-python supabase-backup.py restore \
+python supabase-functions-backup.py restore \
   --project-ref target-ref \
   --dir ./backups/2025-03-11
 ```
@@ -150,8 +150,8 @@ For each function, the tool saves:
 **Cloning functions to a staging environment:**
 
 ```bash
-python supabase-backup.py backup --project-ref prod-ref --dir ./prod-backup
-python supabase-backup.py restore --project-ref staging-ref --dir ./prod-backup
+python supabase-functions-backup.py backup --project-ref prod-ref --dir ./prod-backup
+python supabase-functions-backup.py restore --project-ref staging-ref --dir ./prod-backup
 ```
 
 **Nightly backup via cron:**
@@ -159,7 +159,7 @@ python supabase-backup.py restore --project-ref staging-ref --dir ./prod-backup
 ```bash
 #!/bin/bash
 DATE=$(date +%Y-%m-%d)
-python supabase-backup.py backup \
+python supabase-functions-backup.py backup \
   --project-ref $SUPABASE_PROJECT_REF \
   --dir "/backups/edge-functions/$DATE"
 ```
@@ -167,7 +167,7 @@ python supabase-backup.py backup \
 **Selective restore after an incident:**
 
 ```bash
-python supabase-backup.py restore \
+python supabase-functions-backup.py restore \
   --project-ref prod-ref \
   --dir ./last-known-good \
   --slugs broken-function
