@@ -190,13 +190,17 @@ edge_functions_backup_abcdefghijklmnop/
   manifest.json              # Backup timestamp, source project, function list
   hello-world/
     metadata.json            # Full function config from the API
-    function.eszip           # Compiled source bundle
+    source/
+      index.ts               # Source files as returned by the API
   send-email/
     metadata.json
-    function.eszip
+    source/
+      index.ts
   process-webhook/
     metadata.json
-    function.eszip
+    source/
+      index.ts
+      utils/helper.ts        # Additional files if present
 ```
 
 The `manifest.json` records the source project ref, backup timestamp, and key settings for each function — this is what the `restore` command reads.

@@ -90,14 +90,33 @@ class SupabaseManagementAPI:
         resp = self._get(url)
         return resp.json()
 
-    def get_function_body(self, project_ref: str, slug: str) -> bytes:
+    def get_function_source_files(self, project_ref: str, slug: str) -> list:
         """
-        Download the function's source as an eszip bundle (binary).
-        The Management API returns the compiled/bundled artefact.
+        Download the function's source files via the multipart body endpoint.
+
+        Returns a list of dicts: [{"filename": str, "content": bytes}, ...]
+        The API returns multipart/form-data with one part per source file.
         """
         url = f"{MANAGEMENT_API_BASE}/projects/{project_ref}/functions/{slug}/body"
-        resp = self._get(url, stream=True)
-        return resp.content
+        resp = self._get(url, headers={"Accept": "multipart/form-data"}, stream=True)
+
+        content_type = resp.headers.get("Content-Type", "")
+        if "multipart" not in content_type:
+            # Reason: older API or fallback — single binary blob, save as-is
+            return [{"filename": "function.eszip", "content": resp.content}]
+
+        # Parse the multipart boundary and extract each source file
+        boundary = None
+        for part in content_type.split(";"):
+            part = part.strip()
+            if part.startswith("boundary="):
+                boundary = part[len("boundary="):].strip('"')
+                break
+
+        if not boundary:
+            return [{"filename": "function.eszip", "content": resp.content}]
+
+        return _parse_multipart(resp.content, boundary)
 
     # -- Edge Functions: write ------------------------------------------------
 
@@ -105,21 +124,20 @@ class SupabaseManagementAPI:
         self,
         project_ref: str,
         slug: str,
-        source_path: Path,
+        source_files: list,
         metadata: dict,
     ) -> dict:
         """
-        Deploy (create or update) an Edge Function using the newer
-        /functions/deploy endpoint. Sends the source file + metadata
-        as multipart/form-data.
+        Deploy (create or update) an Edge Function.
+
+        source_files is a list of dicts: [{"filename": str, "content": bytes}, ...]
+        The entrypoint file (e.g. index.ts) must be among them.
         """
         url = (
             f"{MANAGEMENT_API_BASE}/projects/{project_ref}"
             f"/functions/deploy?slug={slug}"
         )
 
-        # Build the metadata payload — the API expects at minimum an
-        # entrypoint_path and optionally a name and verify_jwt flag.
         meta_payload = {
             "entrypoint_path": metadata.get("entrypoint_path", "index.ts"),
             "name": metadata.get("name", slug),
@@ -129,12 +147,12 @@ class SupabaseManagementAPI:
         if "import_map_path" in metadata and metadata["import_map_path"]:
             meta_payload["import_map_path"] = metadata["import_map_path"]
 
-        with open(source_path, "rb") as f:
-            files = {
-                "metadata": (None, json.dumps(meta_payload), "application/json"),
-                "file": (source_path.name, f, "application/octet-stream"),
-            }
-            resp = self.session.post(url, files=files)
+        # Build multipart: one 'metadata' part + one part per source file
+        files = [("metadata", (None, json.dumps(meta_payload), "application/json"))]
+        for sf in source_files:
+            files.append(("file", (sf["filename"], sf["content"], "application/octet-stream")))
+
+        resp = self.session.post(url, files=files)
 
         if resp.status_code >= 400:
             raise RuntimeError(
@@ -172,20 +190,74 @@ class SupabaseManagementAPI:
 
 
 # ---------------------------------------------------------------------------
+# Multipart parser
+# ---------------------------------------------------------------------------
+
+def _parse_multipart(body: bytes, boundary: str) -> list:
+    """
+    Parse a multipart/form-data response body and extract file parts.
+
+    Returns a list of dicts: [{"filename": str, "content": bytes}, ...]
+    """
+    delimiter = f"--{boundary}".encode()
+    parts = body.split(delimiter)
+    files = []
+
+    for part in parts:
+        if not part or part == b"--\r\n" or part == b"--":
+            continue
+        # Split headers from body on the first double CRLF
+        if b"\r\n\r\n" not in part:
+            continue
+        headers_raw, content = part.split(b"\r\n\r\n", 1)
+        # Strip trailing CRLF from content
+        content = content.rstrip(b"\r\n")
+
+        # Extract filename from Content-Disposition header
+        filename = None
+        for line in headers_raw.decode(errors="replace").splitlines():
+            if "content-disposition" in line.lower() and "filename=" in line.lower():
+                for token in line.split(";"):
+                    token = token.strip()
+                    if token.startswith("filename="):
+                        filename = token[len("filename="):].strip('"').strip("'")
+                        break
+            if filename:
+                break
+
+        if filename and content:
+            # Reason: strip any deployment-specific temp path prefix,
+            # keeping only the relative filename (e.g. index.ts, utils/helper.ts)
+            normalized = Path(filename.replace("file://", ""))
+            # If it's an absolute path, take everything after 'source/' if present
+            parts_path = normalized.parts
+            if "source" in parts_path:
+                idx = list(parts_path).index("source")
+                filename = str(Path(*parts_path[idx + 1:]))
+            else:
+                filename = normalized.name
+            files.append({"filename": filename, "content": content})
+
+    return files if files else [{"filename": "function.eszip", "content": body}]
+
+
+# ---------------------------------------------------------------------------
 # Backup logic
 # ---------------------------------------------------------------------------
 
 def do_backup(api: SupabaseManagementAPI, project_ref: str, backup_dir: str):
     """
-    Download every Edge Function's metadata and source bundle into
-    a timestamped backup directory.
+    Download every Edge Function's metadata and source files into
+    a structured backup directory.
 
     Directory layout:
       <backup_dir>/
         manifest.json          # summary of all functions + backup timestamp
         <slug>/
           metadata.json        # function config (name, verify_jwt, etc.)
-          function.eszip       # compiled source bundle from the API
+          source/
+            index.ts           # source files as returned by the API
+            utils/helper.ts    # (any additional files)
     """
     root = Path(backup_dir)
 
@@ -219,10 +291,16 @@ def do_backup(api: SupabaseManagementAPI, project_ref: str, backup_dir: str):
         meta_path.write_text(json.dumps(meta, indent=2))
         time.sleep(REQUEST_DELAY_SECONDS)
 
-        # 2. Save source bundle
-        body = api.get_function_body(project_ref, slug)
-        body_path = fn_dir / "function.eszip"
-        body_path.write_bytes(body)
+        # 2. Save source files from the multipart body endpoint
+        source_files = api.get_function_source_files(project_ref, slug)
+        source_dir = fn_dir / "source"
+        source_dir.mkdir(exist_ok=True)
+        total_bytes = 0
+        for sf in source_files:
+            sf_path = source_dir / sf["filename"]
+            sf_path.parent.mkdir(parents=True, exist_ok=True)
+            sf_path.write_bytes(sf["content"])
+            total_bytes += len(sf["content"])
         time.sleep(REQUEST_DELAY_SECONDS)
 
         manifest["functions"].append({
@@ -231,12 +309,13 @@ def do_backup(api: SupabaseManagementAPI, project_ref: str, backup_dir: str):
             "version": fn.get("version"),
             "status": fn.get("status"),
             "verify_jwt": fn.get("verify_jwt"),
-            "entrypoint_path": fn.get("entrypoint_path", "index.ts"),
+            "entrypoint_path": "index.ts",
             "import_map_path": fn.get("import_map_path"),
+            "source_files": [sf["filename"] for sf in source_files],
         })
 
         print(f"     metadata saved  ({meta_path.stat().st_size:,} bytes)")
-        print(f"     source saved    ({body_path.stat().st_size:,} bytes)")
+        print(f"     source saved    ({total_bytes:,} bytes, {len(source_files)} file(s))")
 
     # Write the manifest
     manifest_path = root / "manifest.json"
@@ -321,41 +400,42 @@ def do_restore(
     for fn_info in selected:
         slug = fn_info["slug"]
         fn_dir = root / slug
-        body_path = fn_dir / "function.eszip"
+        source_dir = fn_dir / "source"
         meta_path = fn_dir / "metadata.json"
 
-        if not body_path.exists():
-            print(f"  SKIP {slug} — source bundle not found at {body_path}")
+        if not source_dir.exists() or not any(source_dir.iterdir()):
+            print(f"  SKIP {slug} — no source files found in {source_dir}")
             continue
 
         meta = {}
         if meta_path.exists():
             meta = json.loads(meta_path.read_text())
 
-        raw_entrypoint = meta.get("entrypoint_path", fn_info.get("entrypoint_path", "index.ts"))
-        entrypoint_path = Path(raw_entrypoint.replace("file://", "")).name or "index.ts"
+        # Load all source files from the source/ subdirectory
+        source_files = []
+        for sf_path in sorted(source_dir.rglob("*")):
+            if sf_path.is_file():
+                rel = sf_path.relative_to(source_dir)
+                source_files.append({"filename": str(rel), "content": sf_path.read_bytes()})
+
+        entrypoint = fn_info.get("entrypoint_path", "index.ts")
+        total_bytes = sum(len(sf["content"]) for sf in source_files)
+        jwt_label = "JWT verified" if meta.get("verify_jwt", fn_info.get("verify_jwt", True)) else "NO JWT check"
 
         deploy_meta = {
             "name": meta.get("name", fn_info.get("name", slug)),
-            "entrypoint_path": entrypoint_path,
-            "verify_jwt": meta.get(
-                "verify_jwt", fn_info.get("verify_jwt", True)
-            ),
-            "import_map_path": meta.get(
-                "import_map_path", fn_info.get("import_map_path")
-            ),
+            "entrypoint_path": entrypoint,
+            "verify_jwt": meta.get("verify_jwt", fn_info.get("verify_jwt", True)),
+            "import_map_path": meta.get("import_map_path", fn_info.get("import_map_path")),
         }
 
-        size = body_path.stat().st_size
-        jwt_label = "JWT verified" if deploy_meta["verify_jwt"] else "NO JWT check"
-
         if dry_run:
-            print(f"  [DRY RUN] Would deploy: {slug} ({size:,} bytes, {jwt_label})")
+            print(f"  [DRY RUN] Would deploy: {slug} ({total_bytes:,} bytes, {len(source_files)} file(s), {jwt_label})")
         else:
-            print(f"  -> Deploying: {slug} ({size:,} bytes, {jwt_label}) ...", end=" ")
+            print(f"  -> Deploying: {slug} ({total_bytes:,} bytes, {len(source_files)} file(s), {jwt_label}) ...", end=" ")
             try:
                 result = api.deploy_function(
-                    project_ref, slug, body_path, deploy_meta
+                    project_ref, slug, source_files, deploy_meta
                 )
                 print(f"OK (v{result.get('version', '?')})")
             except RuntimeError as e:
