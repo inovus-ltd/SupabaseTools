@@ -20,13 +20,41 @@ The tool talks to the [Supabase Management API](https://supabase.com/docs/refere
 
 ## 🚀 Quick Start
 
+If your credentials are set as environment variables (see [🌍 Environment Variables](#-environment-variables)), a backup is just:
+
+```bash
+python supabase-functions-backup.py backup --project-ref abcdefghijklmnop
+```
+
+Or passing the token explicitly:
+
 ```bash
 python supabase-functions-backup.py backup \
   --project-ref abcdefghijklmnop \
   --token sbp_xxxxxxxxxxxxxxxxxxxx
 ```
 
-This creates an `edge_functions_backup/` directory with a manifest and one subdirectory per function.
+**Example output:**
+
+```
+ Backing up Edge Functions for project: abcdefghijklmnop
+   Destination: C:\Projects\supabase-functions-backup\edge_functions_backup_abcdefghijklmnop
+
+  Found 3 function(s):
+
+  -> chat-simulation (v5)
+     metadata saved  (413 bytes)
+     source saved    (18,577 bytes)
+  -> metrics-proxy (v8)
+     metadata saved  (509 bytes)
+     source saved    (7,039 bytes)
+  -> assign-proctor (v4)
+     metadata saved  (497 bytes)
+     source saved    (7,496,348 bytes)
+
+  Backup complete. 3 function(s) saved.
+  Manifest: C:\Projects\supabase-functions-backup\edge_functions_backup_abcdefghijklmnop\manifest.json
+```
 
 ## 📋 Commands & Parameters
 
