@@ -40,13 +40,20 @@ python supabase-functions-backup.py backup [options]
 |-----------|----------|---------|-------------|
 | `--project-ref` | ✅ Yes* | `SUPABASE_PROJECT_REF` env var | Your Supabase project reference ID |
 | `--token` | ✅ Yes* | `SUPABASE_ACCESS_TOKEN` env var | Your Supabase Personal Access Token |
-| `--dir` | No | `edge_functions_backup` | Directory to save the backup into |
+| `--dir` | No | `edge_functions_backup` | Path to the directory to save the backup into. Created automatically if it doesn't exist. Accepts relative or absolute paths. |
 
 ```bash
+# Relative path (macOS / Linux)
 python supabase-functions-backup.py backup \
   --project-ref abcdefghijklmnop \
   --token sbp_xxxxxxxxxxxxxxxxxxxx \
   --dir ./my-backup
+
+# Relative path (Windows — both separators work)
+python supabase-functions-backup.py backup --project-ref abcdefghijklmnop --token sbp_xxxxxxxxxxxxxxxxxxxx --dir .\my-backup
+
+# Absolute path (Windows)
+python supabase-functions-backup.py backup --project-ref abcdefghijklmnop --token sbp_xxxxxxxxxxxxxxxxxxxx --dir C:\Backups\supabase
 ```
 
 ---
@@ -61,7 +68,7 @@ python supabase-functions-backup.py restore [options]
 |-----------|----------|---------|-------------|
 | `--project-ref` | ✅ Yes* | `SUPABASE_PROJECT_REF` env var | Target project to restore functions into |
 | `--token` | ✅ Yes* | `SUPABASE_ACCESS_TOKEN` env var | Your Supabase Personal Access Token |
-| `--dir` | No | `edge_functions_backup` | Directory containing the backup to restore from |
+| `--dir` | No | `edge_functions_backup` | Path to the directory containing the backup to restore from. Accepts relative or absolute paths. |
 | `--slugs` | No | *(all functions)* | Space-separated list of function slugs to restore — omit to restore everything |
 | `--dry-run` | No | `false` | Preview what would be deployed without making any changes |
 
