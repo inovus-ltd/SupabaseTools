@@ -1,36 +1,35 @@
-# Supabase Edge Functions Backup & Restore
+# 🔄 Supabase Edge Functions Backup & Restore
 
 A Python CLI tool that backs up all Edge Functions from a Supabase project and can restore them to the same or a different project. Useful for migrating between environments, disaster recovery, or cloning a project's serverless layer.
 
-## How It Works
+## ⚙️ How It Works
 
-The tool talks to the [Supabase Management API](https://supabase.com/docs/reference/api) -- the same API that powers the CLI and Dashboard. For each Edge Function it:
+The tool talks to the [Supabase Management API](https://supabase.com/docs/reference/api) — the same API that powers the CLI and Dashboard. For each Edge Function it:
 
-1. **Backup**: Downloads the function metadata (name, slug, JWT verification setting, entrypoint, import map) and the compiled source bundle (eszip format), saving everything into a structured local directory.
+1. **🗄️ Backup** — Downloads the function metadata (name, slug, JWT verification setting, entrypoint, import map) and the compiled source bundle (eszip format), saving everything into a structured local directory.
+2. **📤 Restore** — Reads the backup directory and uses the `/functions/deploy` endpoint to push each function to the target project. If a function already exists it gets updated; if not it gets created.
 
-2. **Restore**: Reads the backup directory and uses the `/functions/deploy` endpoint to push each function to the target project. If a function with the same slug already exists, it gets updated. If it doesn't exist, it gets created.
+## ✅ Prerequisites
 
-## Prerequisites
+- 🐍 **Python 3.8+**
+- 🌐 **`requests` library** — `pip install requests`
+- 🔑 **Supabase Personal Access Token (PAT)** — see [🔑 How to Get Your Token](#-how-to-get-your-token) below
+- 🆔 **Supabase Project Reference ID** — the alphanumeric string in your project dashboard URL:
+  `https://supabase.com/dashboard/project/abcdefghijklmnop` → ref is `abcdefghijklmnop`
+  Also visible under *Project Settings → General*.
 
-- Python 3.8+
-- `requests` library (`pip install requests`)
-- A **Supabase Personal Access Token (PAT)** — see [How to get your token](#how-to-get-your-token) below
-- Your **Supabase Project Reference ID** — the short alphanumeric string in your project's dashboard URL, e.g. `https://supabase.com/dashboard/project/abcdefghijklmnop` → ref is `abcdefghijklmnop`. Also visible under *Project Settings → General*.
-
-## How to Get Your Token
+## 🔑 How to Get Your Token
 
 1. Log in to [supabase.com](https://supabase.com)
-2. Click your avatar (top-right) → **Account**
+2. Click your **avatar** (top-right) → **Account**
 3. Go to [Account → Access Tokens](https://supabase.com/dashboard/account/tokens)
 4. Click **Generate new token**, give it a name (e.g. `backup-tool`), and copy the value
 
-> ⚠️ The token is shown **only once**. Store it somewhere safe (e.g. a password manager or `.env` file).
+> ⚠️ The token is shown **only once** — copy it immediately and store it somewhere safe (e.g. a password manager or `.env` file).
 >
-> This is an **account-level** token — it has access to all projects in your Supabase account. Treat it like a password and never commit it to version control.
+> 🔒 This is an **account-level** token with access to **all projects** in your Supabase account. Treat it like a password and never commit it to version control.
 
-## Quick Start
-
-### 1. Back up all functions from a project
+## 🚀 Quick Start
 
 ```bash
 python supabase-functions-backup.py backup \
@@ -38,63 +37,120 @@ python supabase-functions-backup.py backup \
   --token sbp_xxxxxxxxxxxxxxxxxxxx
 ```
 
-Replace `abcdefghijklmnop` with your project ref and `sbp_xxxxxxxxxxxxxxxxxxxx` with your PAT (see [How to Get Your Token](#how-to-get-your-token)).
+This creates an `edge_functions_backup/` directory with a manifest and one subdirectory per function.
 
-This creates an `edge_functions_backup/` directory containing a manifest and one subdirectory per function.
+## 📋 Commands & Parameters
 
-### 2. List functions (without downloading)
+### `backup` — Download all Edge Functions to disk
 
 ```bash
-python supabase-functions-backup.py list \
-  --project-ref your-project-ref \
-  --token sbp_your_token_here
+python supabase-functions-backup.py backup [options]
 ```
 
-### 3. Restore to a different project
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `--project-ref` | ✅ Yes* | `SUPABASE_PROJECT_REF` env var | Your Supabase project reference ID |
+| `--token` | ✅ Yes* | `SUPABASE_ACCESS_TOKEN` env var | Your Supabase Personal Access Token |
+| `--dir` | No | `edge_functions_backup` | Directory to save the backup into |
 
 ```bash
-python supabase-functions-backup.py restore \
-  --project-ref target-project-ref \
-  --token sbp_your_token_here
+python supabase-functions-backup.py backup \
+  --project-ref abcdefghijklmnop \
+  --token sbp_xxxxxxxxxxxxxxxxxxxx \
+  --dir ./my-backup
 ```
 
-### 4. Restore only specific functions
+---
+
+### `restore` — Deploy functions from a backup to a project
 
 ```bash
+python supabase-functions-backup.py restore [options]
+```
+
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `--project-ref` | ✅ Yes* | `SUPABASE_PROJECT_REF` env var | Target project to restore functions into |
+| `--token` | ✅ Yes* | `SUPABASE_ACCESS_TOKEN` env var | Your Supabase Personal Access Token |
+| `--dir` | No | `edge_functions_backup` | Directory containing the backup to restore from |
+| `--slugs` | No | *(all functions)* | Space-separated list of function slugs to restore — omit to restore everything |
+| `--dry-run` | No | `false` | Preview what would be deployed without making any changes |
+
+```bash
+# Restore all functions to a different project
 python supabase-functions-backup.py restore \
   --project-ref target-project-ref \
-  --token sbp_your_token_here \
+  --token sbp_xxxxxxxxxxxxxxxxxxxx
+
+# Restore only specific functions
+python supabase-functions-backup.py restore \
+  --project-ref target-project-ref \
+  --token sbp_xxxxxxxxxxxxxxxxxxxx \
   --slugs send-email process-webhook
-```
 
-### 5. Dry run (preview without deploying)
-
-```bash
+# Preview without deploying anything
 python supabase-functions-backup.py restore \
   --project-ref target-project-ref \
+  --token sbp_xxxxxxxxxxxxxxxxxxxx \
   --dry-run
 ```
 
-## Using Environment Variables
+---
 
-Instead of passing `--token` and `--project-ref` every time, you can set environment variables:
+### `list` — List all Edge Functions on a project
 
 ```bash
+python supabase-functions-backup.py list [options]
+```
+
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `--project-ref` | ✅ Yes* | `SUPABASE_PROJECT_REF` env var | Project to list functions from |
+| `--token` | ✅ Yes* | `SUPABASE_ACCESS_TOKEN` env var | Your Supabase Personal Access Token |
+
+```bash
+python supabase-functions-backup.py list \
+  --project-ref abcdefghijklmnop \
+  --token sbp_xxxxxxxxxxxxxxxxxxxx
+```
+
+> \* Required unless the corresponding environment variable is set — see [🌍 Environment Variables](#-environment-variables) below.
+
+## 🌍 Environment Variables
+
+Set these to avoid passing `--token` and `--project-ref` on every command:
+
+| Variable | Description |
+|----------|-------------|
+| `SUPABASE_ACCESS_TOKEN` | Your Personal Access Token (`sbp_...`) |
+| `SUPABASE_PROJECT_REF` | Your project reference ID |
+
+```bash
+# Windows (Command Prompt)
+set SUPABASE_ACCESS_TOKEN=sbp_your_token_here
+set SUPABASE_PROJECT_REF=your-project-ref
+
+# Windows (PowerShell)
+$env:SUPABASE_ACCESS_TOKEN="sbp_your_token_here"
+$env:SUPABASE_PROJECT_REF="your-project-ref"
+
+# macOS / Linux
 export SUPABASE_ACCESS_TOKEN=sbp_your_token_here
 export SUPABASE_PROJECT_REF=your-project-ref
+```
 
-# Now just:
+Once set, commands simplify to:
+
+```bash
 python supabase-functions-backup.py backup
 python supabase-functions-backup.py list
 ```
 
-## Backup Directory Structure
-
-After a backup, the directory looks like this:
+## 🗂️ Backup Directory Structure
 
 ```
 edge_functions_backup/
-  manifest.json              # When the backup was taken, which project, list of functions
+  manifest.json              # Backup timestamp, source project, function list
   hello-world/
     metadata.json            # Full function config from the API
     function.eszip           # Compiled source bundle
@@ -106,55 +162,33 @@ edge_functions_backup/
     function.eszip
 ```
 
-The `manifest.json` records the source project ref, backup timestamp, and key settings for each function. This is what the restore command reads to know what to deploy and how to configure it.
+The `manifest.json` records the source project ref, backup timestamp, and key settings for each function — this is what the `restore` command reads.
 
-## Custom Backup Directory
+## 📦 What Gets Backed Up
 
-Use `--dir` to control where backups are saved or read from:
+For each function the tool saves:
 
-```bash
-# Save to a specific location
-python supabase-functions-backup.py backup --dir ./backups/2025-03-11
+| Field | Description |
+|-------|-------------|
+| `slug` | URL-safe identifier used to invoke the function |
+| `name` | Human-readable display name |
+| `verify_jwt` | Whether the function requires a valid JWT to invoke |
+| `entrypoint_path` | Entry point file (usually `index.ts`) |
+| `import_map_path` | Path to the import map, if configured |
+| `version` | Deployment version number |
+| `status` | Whether the function is `ACTIVE` or not |
+| source bundle | The compiled `.eszip` artefact that Supabase actually runs |
 
-# Restore from that location
-python supabase-functions-backup.py restore \
-  --project-ref target-ref \
-  --dir ./backups/2025-03-11
-```
+## 🔁 Typical Workflows
 
-## What Gets Backed Up
-
-For each function, the tool saves:
-
-- **slug** -- the URL-safe identifier used to invoke the function
-- **name** -- the human-readable display name
-- **verify_jwt** -- whether the function requires a valid JWT to invoke
-- **entrypoint_path** -- which file is the entry point (usually `index.ts`)
-- **import_map_path** -- path to the import map, if one is configured
-- **version** -- the deployment version number
-- **status** -- whether the function is ACTIVE or not
-- **source bundle** -- the compiled eszip artefact that Supabase actually runs
-
-## Important Notes
-
-- **Secrets are NOT backed up.** Edge Function secrets (environment variables set via `supabase secrets set`) are stored separately and are not accessible through the Management API's function endpoints. You will need to set these manually on the target project after restoring.
-
-- **The source bundle is a compiled artefact.** The Management API returns the eszip bundle, not your original TypeScript source files. If you need the raw source, keep it in version control (which you should be doing anyway). This tool is for backing up the *deployed* state.
-
-- **Rate limiting is handled automatically.** The script adds a small delay between API calls and will back off and retry if it hits the 120 requests/minute limit.
-
-- **Restoring to the same project overwrites.** If you restore to the project the backup came from, existing functions with matching slugs will be updated to the backed-up version. The tool will warn you about this.
-
-## Typical Workflows
-
-**Cloning functions to a staging environment:**
+**Clone functions to a staging environment:**
 
 ```bash
 python supabase-functions-backup.py backup --project-ref prod-ref --dir ./prod-backup
 python supabase-functions-backup.py restore --project-ref staging-ref --dir ./prod-backup
 ```
 
-**Nightly backup via cron:**
+**Nightly backup via cron (macOS/Linux):**
 
 ```bash
 #!/bin/bash
@@ -172,3 +206,10 @@ python supabase-functions-backup.py restore \
   --dir ./last-known-good \
   --slugs broken-function
 ```
+
+## ⚠️ Important Notes
+
+- 🔐 **Secrets are NOT backed up.** Edge Function secrets (set via `supabase secrets set`) are not accessible through the Management API. You'll need to set these manually on the target project after restoring.
+- 📦 **The source bundle is a compiled artefact.** The API returns the eszip bundle, not your original TypeScript source files. Keep raw source in version control — this tool backs up the *deployed* state.
+- 🚦 **Rate limiting is handled automatically.** The script adds a small delay between API calls and will back off and retry if it hits the 120 requests/minute limit.
+- ♻️ **Restoring to the same project overwrites.** Functions with matching slugs will be updated to the backed-up version. The tool will warn you before proceeding.

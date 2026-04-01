@@ -413,7 +413,7 @@ Environment variables:
 """,
     )
 
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers = parser.add_subparsers(dest="command")
 
     # -- Shared arguments via parent --
     parent = argparse.ArgumentParser(add_help=False)
@@ -477,15 +477,28 @@ def main():
     parser = build_parser()
     args = parser.parse_args()
 
-    # Validate required params
+    # Print full help when called with no arguments
+    if not args.command:
+        parser.print_help()
+        sys.exit(0)
+
+    # Validate required params with friendly, actionable messages
+    subparser = parser._subparsers._actions[-1].choices[args.command]
+    ok = True
     if not args.token:
-        parser.error(
-            "Access token is required. Use --token or set SUPABASE_ACCESS_TOKEN."
-        )
+        print("ERROR: Access token is required.")
+        print("  Use --token <your_token> or set the SUPABASE_ACCESS_TOKEN environment variable.")
+        print("  Get a token at: https://supabase.com/dashboard/account/tokens")
+        ok = False
     if not args.project_ref:
-        parser.error(
-            "Project ref is required. Use --project-ref or set SUPABASE_PROJECT_REF."
-        )
+        print("ERROR: Project reference is required.")
+        print("  Use --project-ref <ref> or set the SUPABASE_PROJECT_REF environment variable.")
+        print("  Your project ref is in the dashboard URL: supabase.com/dashboard/project/<ref>")
+        ok = False
+    if not ok:
+        print()
+        subparser.print_help()
+        sys.exit(1)
 
     api = SupabaseManagementAPI(args.token)
 
