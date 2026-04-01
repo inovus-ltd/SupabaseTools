@@ -243,7 +243,12 @@ def do_backup(api: SupabaseManagementAPI, project_ref: str, backup_dir: str):
     manifest_path.write_text(json.dumps(manifest, indent=2))
 
     print(f"\n  Backup complete. {len(functions)} function(s) saved.")
-    print(f"  Manifest: {manifest_path.resolve()}\n")
+    print(f"  Manifest: {manifest_path.resolve()}")
+    print(f"\n  To restore these functions:")
+    print(f"    Same project:      python supabase-functions-backup.py restore --project-ref {project_ref}")
+    print(f"    Different project: python supabase-functions-backup.py restore --project-ref <target-ref> --dir {root.resolve()}")
+    print(f"    e.g.               python supabase-functions-backup.py restore --project-ref abcdefghijklmnop --dir {root.resolve()}")
+    print()
 
 
 # ---------------------------------------------------------------------------
@@ -268,7 +273,22 @@ def do_restore(
 
     if not manifest_path.exists():
         print(f"ERROR: No manifest.json found in {root.resolve()}")
-        print("  Make sure you're pointing at a valid backup directory.")
+        print()
+        print("  This usually means you are restoring to a DIFFERENT project than the one you backed up.")
+        print("  The backup folder is named after the SOURCE project, not the restore target.")
+        print()
+        print("  Use --dir to point at the correct backup folder, e.g.:")
+        print(f"    python supabase-functions-backup.py restore --project-ref {project_ref} --dir edge_functions_backup_<source-project-ref>")
+        print()
+        print("  Available backup folders in the current directory:")
+        found_any = False
+        for p in sorted(Path(".").iterdir()):
+            if p.is_dir() and (p / "manifest.json").exists():
+                found_any = True
+                mf = json.loads((p / "manifest.json").read_text())
+                print(f"    {p}  (backed up from: {mf.get('project_ref', '?')}, at: {mf.get('backup_time', '?')})")
+        if not found_any:
+            print("    (none found — run 'backup' first)")
         sys.exit(1)
 
     manifest = json.loads(manifest_path.read_text())

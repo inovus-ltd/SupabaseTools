@@ -100,22 +100,33 @@ python supabase-functions-backup.py restore [options]
 | `--slugs` | No | *(all functions)* | Space-separated list of function slugs to restore — omit to restore everything |
 | `--dry-run` | No | `false` | Preview what would be deployed without making any changes |
 
-```bash
-# Restore all functions to a different project
-python supabase-functions-backup.py restore \
-  --project-ref target-project-ref \
-  --token sbp_xxxxxxxxxxxxxxxxxxxx
+**Restoring to the same project** (default `--dir` works automatically):
 
+```bash
+python supabase-functions-backup.py restore --project-ref abcdefghijklmnop
+```
+
+**Restoring to a DIFFERENT project** — you must use `--dir` to point at the source project's backup folder, since the default folder is named after the *target* project ref, not the source:
+
+```bash
+python supabase-functions-backup.py restore \
+  --project-ref newprojectref \
+  --dir edge_functions_backup_abcdefghijklmnop
+```
+
+> 💡 If you forget `--dir`, the script will print the available backup folders and their source project refs to help you find the right one.
+
+```bash
 # Restore only specific functions
 python supabase-functions-backup.py restore \
-  --project-ref target-project-ref \
-  --token sbp_xxxxxxxxxxxxxxxxxxxx \
+  --project-ref newprojectref \
+  --dir edge_functions_backup_abcdefghijklmnop \
   --slugs send-email process-webhook
 
 # Preview without deploying anything
 python supabase-functions-backup.py restore \
-  --project-ref target-project-ref \
-  --token sbp_xxxxxxxxxxxxxxxxxxxx \
+  --project-ref newprojectref \
+  --dir edge_functions_backup_abcdefghijklmnop \
   --dry-run
 ```
 
