@@ -1,0 +1,92 @@
+[
+  {
+    "id": "9b68a0a7-45d5-4839-bf90-543714f60a75",
+    "type": "cognito",
+    "oidc_issuer_url": "https://cognito-idp.eu-west-2.amazonaws.com/eu-west-2_aa7ucEcDs",
+    "jwks_url": null,
+    "custom_jwks": null,
+    "resolved_at": "2025-11-08T00:46:01.254+00:00",
+    "resolved_jwks": {
+      "keys": [
+        {
+          "e": "AQAB",
+          "n": "pa8L0tVkJV7DinjqHutjMHD3V2-whfJCy0hPMFV5Jdfr5uuRZvji2HHui9AUMfnacuIcBxFeVxDlrqxLM1PNyYS5YDmx3PVOOBeDBzqecKn-XmKKChJMAzukBAjgjI7rGzt6IzTDitZEvnn4K4YLaB2tfPA7un7-8DLvujqPloTcP6V8E9Ir7fL97AKP0jKjO6YT_HmSS3WzSS-b-qdDJEiMg6BYq68uL1MMq2NrqJJ24XpFRye_lmD86hIJs2cSGKg3wGJf2K9TXc8J6an7M248HhEV2PdfmrG0dBk4G238sI3D8_lafWd5Es83BKxjlv7QRTEO-x4YNcvEbr1eHw",
+          "alg": "RS256",
+          "kid": "9HXrtmZPYV8brIlzrn4JNJA1QwDReAKCEw0tgl/Yx8g=",
+          "kty": "RSA",
+          "use": "sig"
+        },
+        {
+          "e": "AQAB",
+          "n": "wuDdkjx7Kq3wVxaH36ud0SZ3duaAW8de6lNEmIYqOvncfSyM2-8Dy9RhMrcKq1cN4u10d8C1aaSjxk9cGSB-7lXZwyG1p9sadF73h7WZmCR5e_xFPWFCqp5XDvgCaLVmzyqI8BCFJeCsMRvkTLW96IzSZAK4q-aC90hdDaEJaZU-24r1GCSrYZAsA49a_Hhbplfvy52LWHQog1bXHbGsZoeM8OtCMbrbIcdDgy75i7qX4RfphzA-vaFqfpM-qp7H-ZCVwrwuRz9vFxto77mcQ4cOg5j_SqPbOrPt_lnnXb4MEKsDo7tzPylkb2htbq1sBjsG2HGm3sjijf5yFZAytw",
+          "alg": "RS256",
+          "kid": "gY8rf9mhJSpIDc+JyiMiOkiZFGACzDBVdt/cK2arWK4=",
+          "kty": "RSA",
+          "use": "sig"
+        }
+      ]
+    },
+    "inserted_at": "2025-11-08T00:46:01.357453+00:00",
+    "updated_at": "2025-11-08T00:46:01.357453+00:00"
+  },
+  {
+    "id": "25156bd7-de16-46fb-bdc6-bd9404d5e992",
+    "type": "cognito",
+    "oidc_issuer_url": "https://cognito-idp.eu-west-2.amazonaws.com/eu-west-2_kdwwnU0Yu",
+    "jwks_url": null,
+    "custom_jwks": null,
+    "resolved_at": "2025-09-09T17:41:26.561+00:00",
+    "resolved_jwks": {
+      "keys": [
+        {
+          "e": "AQAB",
+          "n": "0WMt1D3h0dPC0jvlJqCzs6IFc76ccSOIX8gD27vLezYyOOYhGwJNzXc0SJdPuvHc7PhuCXzLQ7YTGbk3TJd4Tbn8hPYvKbBqN7d_wUaXjH2PwU7fOQHhh4MyrLQQI6GvyUrnYFpYEcG4IoLnqM263vB-BIK9mOP_7PoeiL7QWR_HkIz9PbptM88KzBa-xyVI_YeAGzawVWyxDZ436pEXP9BBJHVoC4iQ-YXidZRnM2U_UQ1TrmUBfWbYYfIZOIjLSVMjpSPsrR4Kh7T5nn-kFNCMzXf8SR9_fes4e2k5xJBQsMzm6pQYSNEQFF68pofHWTluqJveK1BQ1OlY4A9fUw",
+          "alg": "RS256",
+          "kid": "oPdvzOAVSPM9I0CE0CQ/Ki7VmWGIB8o+gLE8uefK/C4=",
+          "kty": "RSA",
+          "use": "sig"
+        },
+        {
+          "e": "AQAB",
+          "n": "5aeRRLetjlTW6WmvTKhea9Y3EtCfVgxx1hmzgNLqzg-P_YFPqH0T-9PxLD4UoA6iHmwKwX8j8dibsV74JwMs3pSAf7u74wfHTazPw824M0wdIWb3Wzb3If5nwaoD-3vnTQydNpcfCqK4xmH9owqaBSjMArFzbQbHtFBag7IE7ir0xPNoCm9zfFLve7yFOLRQbGjD1cp-VY-0aAAYOCtucRFn8DD_onQA7FBQDH49WQpeWukhVQ17DSPOwEmJu1yLpo7FjY8q33goJxvcoxO3mhRv4L8sD9cfTRqeDSf5cvrILmZmJmhtrscXVJxloBEO7jKfOfYGZezDH-0jjhrH5w",
+          "alg": "RS256",
+          "kid": "5flxB8iXOKJKHBI38c3hlD9lwkeY9GnExVq+HwsPCmM=",
+          "kty": "RSA",
+          "use": "sig"
+        }
+      ]
+    },
+    "inserted_at": "2025-09-09T17:41:26.643998+00:00",
+    "updated_at": "2025-09-09T17:41:26.643998+00:00"
+  },
+  {
+    "id": "fdad3319-8bf0-4e90-bceb-5e090b38fd66",
+    "type": "cognito",
+    "oidc_issuer_url": "https://cognito-idp.eu-west-2.amazonaws.com/eu-west-2_uRGwE4ZG2",
+    "jwks_url": null,
+    "custom_jwks": null,
+    "resolved_at": "2025-11-08T00:45:21.892+00:00",
+    "resolved_jwks": {
+      "keys": [
+        {
+          "e": "AQAB",
+          "n": "qaYimyOyjEI-JAgiRlJEnsytyp48fLC3X4nzq-XnKd2Zn8LFMfv56z3pMFFdPFAi8Ong15N5nv-nvZ4Ish9Ik0eJRkNGns2-AkMoE-OhQhr-Y-MAThQmk-5UHAVz3xdCtz1MsdWLRudpPe2ZPZ0PET60DptcAvJfdn9Mim9kv4CXKFBfp81uGlTeg6SJkHixN-TVSV7vXZUQJv55oddR_6fPJq42rWVyqgbT7-kCnViUdYmci1hrRLwmgzI1_o79_u7DPSKdICLdcz8QDfoEGbYKJ-zfdhIsEZ_dw_FDqAcLsqJCxkreMWaJMf0Zuo09Qn0O-FElKLMGuMnvkt3YYw",
+          "alg": "RS256",
+          "kid": "Kfsk1kmnNtwqSUPUlz4YAjzKWcXR4r51UCra8c1hi90=",
+          "kty": "RSA",
+          "use": "sig"
+        },
+        {
+          "e": "AQAB",
+          "n": "xgOBSPfh-JuTTciDtRxWVbINmsPViS2FFUJYdSMbn79fKZo_DqblSARMCX8XTWbATIjGWf__chpxnq18q0QqPNtFuPDwgdR7f3JShLGdp4aCOOn-_hUA9Jdf-pRXurtOxUvBSxWRG-4QJ3RC_XvUOkoYTHp7znd9IyRQyVumY7iklhDw-n-2au5m0TcaRRl8G5-WQQLzpfmkJqNgVxWlpebkL4P4v6njNpYs7lHlO69WvP9vctOUocWyOXZxkfK7vL_kHoSbjgYNKjABrlU4Ke96ZQoZBZk7S_uKr1sFwaJA7UnCk0cQSy3smOe4ViaV2CaQq7kM-AU2b-tQMoUbbw",
+          "alg": "RS256",
+          "kid": "nqPC3uryATs07JULzA/pnYKD/7oDxuoamJaY4uIOaQU=",
+          "kty": "RSA",
+          "use": "sig"
+        }
+      ]
+    },
+    "inserted_at": "2025-11-08T00:45:21.994482+00:00",
+    "updated_at": "2025-11-08T00:45:21.994482+00:00"
+  }
+]

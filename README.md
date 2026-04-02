@@ -9,6 +9,7 @@ A collection of Python scripts and tools for managing, automating, and maintaini
 | [`supabase-functions-backup`](./supabase-functions-backup/README.md) | 🔄 Backup and restore Supabase Edge Functions using the Management API |
 | [`supabase-storage-copy`](./supabase-storage-copy/README.md) | 🗄️ Backup and restore Supabase Storage buckets (config + files) across projects |
 | [`supabase-secrets-manager`](./supabase-secrets-manager/README.md) | 🔑 List, add, update, and delete Edge Function secrets on any project |
+| [`supabase-auth-copy`](./supabase-auth-copy/README.md) | 🔐 Backup and restore Auth config and Third-Party Auth providers (e.g. Amazon Cognito) across projects |
 
 ## ✅ Prerequisites
 

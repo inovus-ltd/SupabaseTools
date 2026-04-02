@@ -19,6 +19,9 @@ SupabaseTools/
   supabase-secrets-manager/
     supabase-secrets-manager.py     # Edge Function secrets list/set/delete/push tool
     README.md
+  supabase-auth-copy/
+    supabase-auth-copy.py           # Auth config + Third-Party Auth provider backup/restore
+    README.md
   README.md                         # Root overview
   AGENT.md                          # This file
   .gitignore
@@ -320,6 +323,83 @@ python supabase-secrets-manager.py push --project-ref <ref> --token <pat> [--env
 
 ---
 
+## Tool 4: `supabase-auth-copy`
+
+**Script:** `supabase-auth-copy/supabase-auth-copy.py`
+
+Backup and restore Supabase Auth configuration and Third-Party Auth provider integrations (e.g. Amazon Cognito User Pools) across projects. Does **not** require a service role key.
+
+**Important:** Sensitive values (JWT secret, OAuth client secrets, SMTP password) are **stripped from backups** and never restored. They must be set manually on the target.
+
+### Commands
+
+#### `list` — Show auth config summary and providers
+
+```
+python supabase-auth-copy.py list --project-ref <ref> --token <pat>
+```
+
+**Output:** Key auth settings (site URL, JWT expiry, signup disabled, email config) and all third-party provider integrations.
+
+---
+
+#### `backup` — Save auth config and providers to disk
+
+```
+python supabase-auth-copy.py backup --project-ref <ref> --token <pat> [--dir <path>]
+```
+
+| Flag | Required | Default | Description |
+|------|----------|---------|-------------|
+| `--project-ref` | Yes* | `SUPABASE_PROJECT_REF` | Source project ref |
+| `--token` | Yes* | `SUPABASE_ACCESS_TOKEN` | PAT |
+| `--dir` | No | `auth_backup_<project-ref>` | Directory to write backup into |
+
+**Output directory layout:**
+```
+auth_backup_<ref>/
+  manifest.json           # project_ref, backup_time, provider count, stripped key names
+  auth_config.json        # full auth config blob (sensitive keys removed)
+  third_party_auth.json   # list of third-party provider configs
+```
+
+---
+
+#### `restore` — Apply auth config and providers to a project
+
+```
+python supabase-auth-copy.py restore --project-ref <ref> --token <pat> [--dir <path>] [options]
+```
+
+| Flag | Required | Default | Description |
+|------|----------|---------|-------------|
+| `--project-ref` | Yes* | `SUPABASE_PROJECT_REF` | Target project ref |
+| `--token` | Yes* | `SUPABASE_ACCESS_TOKEN` | PAT |
+| `--dir` | No | `auth_backup_<project-ref>` | Directory to read backup from |
+| `--skip-config` | No | false | Skip auth config — only restore providers |
+| `--skip-providers` | No | false | Skip providers — only restore auth config |
+| `--dry-run` | No | false | Preview without making any changes |
+
+**Key behaviour:**
+- Auth config is applied via PATCH — only keys present in backup are changed; others untouched.
+- Providers already matching on the target (same type + pool ID + region) are skipped — no duplicates.
+- When cross-project, use `--dir` to point at source backup folder.
+- `site_url` is restored from backup — update it manually if the target project has a different domain.
+
+---
+
+### Auth — What is and is NOT backed up
+
+| Backed up | NOT backed up |
+|-----------|---------------|
+| JWT expiry, site URL, redirect URLs | JWT secret (sensitive) |
+| Email/password, session, rate limit settings | OAuth client secrets (sensitive) |
+| MFA settings | SMTP password (sensitive) |
+| OAuth provider enabled flags + client IDs | User data |
+| Amazon Cognito User Pool integrations (pool ID + region) | RLS policies |
+
+---
+
 ## Common Patterns for Agents
 
 ### Clone Edge Functions from project A to project B
@@ -341,6 +421,19 @@ python supabase-storage-copy.py restore --project-ref <target-ref> --token <pat>
 ```
 python supabase-functions-backup.py restore --project-ref <ref> --token <pat> --dry-run
 python supabase-storage-copy.py restore --project-ref <ref> --token <pat> --service-key <key> --dry-run
+```
+
+### Clone Auth config and Third-Party Providers from project A to project B
+
+```
+python supabase-auth-copy.py backup --project-ref <source-ref> --token <pat>
+python supabase-auth-copy.py restore --project-ref <target-ref> --token <pat> --dir auth_backup_<source-ref>
+```
+
+### Copy only Third-Party Auth providers (skip general auth config)
+
+```
+python supabase-auth-copy.py restore --project-ref <target-ref> --token <pat> --dir auth_backup_<source-ref> --skip-config
 ```
 
 ### Copy secrets to another project (via .env file)
