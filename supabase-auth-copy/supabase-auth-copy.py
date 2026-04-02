@@ -105,6 +105,27 @@ READONLY_AUTH_KEYS = {
     "uri_allow_list",  # managed separately via redirect URLs
 }
 
+# Auth hook keys that require a paid Supabase plan (Pro or above).
+# Sending these on a free-plan project causes a 402 error.
+# They are saved in the backup but skipped during restore.
+PAID_PLAN_KEYS = {
+    "hook_password_verification_attempt_enabled",
+    "hook_password_verification_attempt_uri",
+    "hook_password_verification_attempt_secrets",
+    "hook_mfa_verification_attempt_enabled",
+    "hook_mfa_verification_attempt_uri",
+    "hook_mfa_verification_attempt_secrets",
+    "hook_custom_access_token_enabled",
+    "hook_custom_access_token_uri",
+    "hook_custom_access_token_secrets",
+    "hook_send_sms_enabled",
+    "hook_send_sms_uri",
+    "hook_send_sms_secrets",
+    "hook_send_email_enabled",
+    "hook_send_email_uri",
+    "hook_send_email_secrets",
+}
+
 
 # ---------------------------------------------------------------------------
 # API client
@@ -302,7 +323,7 @@ def _strip_for_restore(config: dict) -> dict:
     Returns:
         dict: Config safe to PATCH onto any project.
     """
-    exclude = SENSITIVE_AUTH_KEYS | READONLY_AUTH_KEYS | SMTP_DEPENDENT_KEYS
+    exclude = SENSITIVE_AUTH_KEYS | READONLY_AUTH_KEYS | SMTP_DEPENDENT_KEYS | PAID_PLAN_KEYS
     return {k: v for k, v in config.items() if k not in exclude}
 
 
@@ -533,11 +554,14 @@ def do_restore(
         # to be pre-configured on the target and cause 401 if sent without it.
         config = _strip_for_restore(raw_config)
         smtp_skipped = sorted(SMTP_DEPENDENT_KEYS & set(raw_config.keys()))
+        paid_skipped = sorted(PAID_PLAN_KEYS & set(raw_config.keys()))
 
         print(f"  ── Auth Config ({'DRY RUN — skipping' if dry_run else 'applying'}) ──────────────────")
         print(f"    {len(config)} key(s) to apply")
         if smtp_skipped:
-            print(f"    ⚠️  SMTP-dependent keys skipped (configure SMTP on target first): {', '.join(smtp_skipped)}")
+            print(f"    ⚠️  SMTP keys skipped (configure SMTP on target first): {', '.join(smtp_skipped)}")
+        if paid_skipped:
+            print(f"    ⚠️  Paid-plan hook keys skipped (Pro plan required on target): {', '.join(paid_skipped)}")
 
         # Always show a few key values so user can verify
         preview_keys = ["site_url", "jwt_exp", "disable_signup", "email_confirmations"]
