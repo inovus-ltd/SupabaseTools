@@ -16,6 +16,9 @@ SupabaseTools/
   supabase-storage-copy/
     supabase-storage-copy.py        # Storage bucket backup & restore tool
     README.md
+  supabase-secrets-manager/
+    supabase-secrets-manager.py     # Edge Function secrets list/set/delete/push tool
+    README.md
   README.md                         # Root overview
   AGENT.md                          # This file
   .gitignore
@@ -233,6 +236,90 @@ python supabase-storage-copy.py restore --project-ref <ref> --token <pat> --serv
 
 ---
 
+---
+
+## Tool 3: `supabase-secrets-manager`
+
+**Script:** `supabase-secrets-manager/supabase-secrets-manager.py`
+
+List, add, update, and delete Supabase Edge Function secrets via the Management API. Does **not** require a service role key.
+
+**Critical constraint:** The API **never returns secret values** — only names. This tool cannot export existing secret values from a project.
+
+### Commands
+
+#### `list` — List all secret names on a project
+
+```
+python supabase-secrets-manager.py list --project-ref <ref> --token <pat>
+```
+
+**Output:** Prints each secret name alphabetically. Values are never shown.
+
+---
+
+#### `set` — Add or update secrets interactively
+
+```
+python supabase-secrets-manager.py set --project-ref <ref> --token <pat> [--names NAME1 NAME2 ...]
+```
+
+| Flag | Required | Default | Description |
+|------|----------|---------|-------------|
+| `--project-ref` | Yes* | `SUPABASE_PROJECT_REF` | Target project ref |
+| `--token` | Yes* | `SUPABASE_ACCESS_TOKEN` | PAT |
+| `--names` | No | *(prompted)* | Secret names to set — if omitted, prompts for both name and value in a loop |
+| `--dry-run` | No | false | Preview without setting |
+
+- Values are entered via hidden prompt (like a password). Existing secrets are overwritten.
+- If `--names` provided: prompts only for values, one per name.
+- If `--names` omitted: loops prompting for name then value until blank name entered.
+
+---
+
+#### `delete` — Delete secrets by name
+
+```
+python supabase-secrets-manager.py delete --project-ref <ref> --token <pat> --names NAME1 NAME2 ...
+```
+
+| Flag | Required | Default | Description |
+|------|----------|---------|-------------|
+| `--names` | Yes | — | One or more secret names to delete |
+| `--dry-run` | No | false | Preview without deleting |
+
+- Requires typing `YES` to confirm before deleting.
+
+---
+
+#### `push` — Push secrets from a .env file
+
+```
+python supabase-secrets-manager.py push --project-ref <ref> --token <pat> [--env-file PATH]
+```
+
+| Flag | Required | Default | Description |
+|------|----------|---------|-------------|
+| `--env-file` | No | `.env` | Path to the .env file to read secrets from |
+| `--dry-run` | No | false | Preview without pushing |
+
+- Parses `KEY=VALUE` lines; skips blank lines and `#` comments.
+- Strips surrounding single or double quotes from values.
+- All parsed secrets are upserted on the project.
+
+---
+
+### Secrets — What is and is NOT possible
+
+| Possible | NOT possible |
+|----------|--------------|
+| List secret names | Read/export existing secret values |
+| Set (create or overwrite) secrets by name+value | Copy secret values from one project to another automatically |
+| Delete secrets by name | |
+| Push secrets from a .env file | |
+
+---
+
 ## Common Patterns for Agents
 
 ### Clone Edge Functions from project A to project B
@@ -254,6 +341,19 @@ python supabase-storage-copy.py restore --project-ref <target-ref> --token <pat>
 ```
 python supabase-functions-backup.py restore --project-ref <ref> --token <pat> --dry-run
 python supabase-storage-copy.py restore --project-ref <ref> --token <pat> --service-key <key> --dry-run
+```
+
+### Copy secrets to another project (via .env file)
+
+```
+REM Step 1: List secret names on the source project
+python supabase-secrets-manager.py list --project-ref <source-ref> --token <pat>
+
+REM Step 2: Push from a .env file to the target (if you have the values in a file)
+python supabase-secrets-manager.py push --project-ref <target-ref> --token <pat> --env-file .env.production
+
+REM OR: Set secrets interactively on the target using the names from step 1
+python supabase-secrets-manager.py set --project-ref <target-ref> --token <pat> --names SECRET_A SECRET_B SECRET_C
 ```
 
 ### Restore only specific items
