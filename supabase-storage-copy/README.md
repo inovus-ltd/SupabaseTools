@@ -19,15 +19,65 @@ Backup and restore Supabase Storage buckets (config + all files) across projects
 
 ## ⚡ Quick Start
 
+**Step 1 — List buckets on the source project:**
+
 ```cmd
-REM List all buckets on a project
 python supabase-storage-copy.py list --project-ref abcdefghijklmnop --token sbp_xxxxxxxxxxxx --service-key eyJhbGci...
+```
 
-REM Backup all buckets to a local directory
+```
+ Storage buckets on project: abcdefghijklmnop
+
+  📦 activity-media  [public, max 100MB]
+
+  Total: 1 bucket(s)
+```
+
+**Step 2 — Back up all buckets to a local directory:**
+
+```cmd
 python supabase-storage-copy.py backup --project-ref abcdefghijklmnop --token sbp_xxxxxxxxxxxx --service-key eyJhbGci...
+```
 
-REM Restore to a different project
-python supabase-storage-copy.py restore --project-ref newprojectref --token sbp_xxxxxxxxxxxx --service-key eyJhbGci... --dir storage_backup_abcdefghijklmnop
+```
+ Backing up Storage for project: abcdefghijklmnop
+   Destination: J:\Dev\SupabaseTools\supabase-storage-copy\storage_backup_abcdefghijklmnop
+
+  Found 1 bucket(s):
+
+  📦 activity-media
+     45 object(s)
+     45 downloaded (204996.9 KB)
+
+  Backup complete. 1 bucket(s) saved.
+  Manifest: J:\Dev\SupabaseTools\supabase-storage-copy\storage_backup_abcdefghijklmnop\manifest.json
+
+  To restore these buckets:
+    Same project:      python supabase-storage-copy.py restore --project-ref abcdefghijklmnop --service-key <key>
+    Different project: python supabase-storage-copy.py restore --project-ref <target-ref> --service-key <key> --dir storage_backup_abcdefghijklmnop
+    e.g.               python supabase-storage-copy.py restore --project-ref newprojectref --service-key <key> --dir storage_backup_abcdefghijklmnop
+```
+
+**Step 3 — Restore to a different project:**
+
+```cmd
+python supabase-storage-copy.py restore --project-ref newprojectref --token sbp_xxxxxxxxxxxx --service-key eyJhbGci... --dir storage_backup_abcdefghijklmnop --mode overwrite
+```
+
+```
+ Restoring Storage to project: newprojectref
+   Source backup:    J:\Dev\SupabaseTools\supabase-storage-copy\storage_backup_abcdefghijklmnop
+   Backup taken:     2026-04-02T10:36:20.240525+00:00
+   Original project: abcdefghijklmnop
+   Mode:             overwrite
+
+  Will restore 1 bucket(s) [overwrite mode]:
+
+  📦 activity-media  (exists)
+     updated bucket config
+     45 file(s) uploaded (204996.9 KB)
+
+  Restore restored. 1 bucket(s) processed.
 ```
 
 ---
