@@ -7,6 +7,7 @@ A collection of Python scripts and tools for managing, automating, and maintaini
 | Tool | Description |
 |------|-------------|
 | [`supabase-functions-backup`](./supabase-functions-backup/README.md) | 🔄 Backup and restore Supabase Edge Functions using the Management API |
+| [`supabase-storage-copy`](./supabase-storage-copy/README.md) | 🗄️ Backup and restore Supabase Storage buckets (config + files) across projects |
 
 ## ✅ Prerequisites
 
@@ -14,6 +15,7 @@ A collection of Python scripts and tools for managing, automating, and maintaini
 - 📦 **pip** — bundled with Python 3.4+; upgrade with `python -m pip install --upgrade pip`
 - 🌐 **`requests` library** — used by all HTTP-based tools: `pip install requests`
 - 🔑 **Supabase Personal Access Token (PAT)** — see [🔑 How to Get Your Token](#-how-to-get-your-token) below
+- 🗝️ **Supabase Service Role Key** *(storage tools only)* — found in *Project Settings → API → Project API Keys → service_role*
 - 🆔 **Supabase Project Reference ID** — the alphanumeric string in your project's dashboard URL:
   `https://supabase.com/dashboard/project/abcdefghijklmnop` → ref is `abcdefghijklmnop`
   Also found under *Project Settings → General* in the Supabase dashboard.

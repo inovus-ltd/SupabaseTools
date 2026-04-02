@@ -6,6 +6,7 @@
 
 # Supabase backup output directories
 edge_functions_backup_*/
+storage_backup_*/
 backups/
 
 # Supabase backup artefacts (in case --dir points somewhere custom)
