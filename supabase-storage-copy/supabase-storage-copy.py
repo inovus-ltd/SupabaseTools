@@ -122,7 +122,10 @@ class SupabaseStorageAPI:
 
     def update_bucket(self, bucket_id: str, config: dict) -> dict:
         """
-        Update an existing storage bucket's configuration.
+        Update an existing storage bucket's configuration via the Storage API.
+
+        Reason: The Management API has no PUT /storage/buckets endpoint —
+        bucket config updates must go through the per-project Storage API.
 
         Args:
             bucket_id (str): Bucket identifier.
@@ -131,14 +134,15 @@ class SupabaseStorageAPI:
         Returns:
             dict: API response.
         """
-        url = f"{MANAGEMENT_API_BASE}/projects/{self.project_ref}/storage/buckets/{bucket_id}"
+        url = f"{self.storage_base}/bucket/{bucket_id}"
+        # Reason: only send public flag and mime types — file_size_limit is an
+        # integer that some Storage API versions mishandle in PUT/PATCH bodies,
+        # and overwriting it is rarely needed for a cross-project copy.
         payload = {"public": config.get("public", False)}
-        if config.get("file_size_limit"):
-            payload["file_size_limit"] = config["file_size_limit"]
         if config.get("allowed_mime_types"):
             payload["allowed_mime_types"] = config["allowed_mime_types"]
 
-        resp = self._mgmt.put(url, json=payload)
+        resp = self._storage.put(url, json=payload)
         if resp.status_code >= 400:
             raise RuntimeError(
                 f"Update bucket '{bucket_id}' failed (HTTP {resp.status_code}): {resp.text}"
@@ -285,13 +289,29 @@ def _guess_content_type(filename: str) -> str:
     """
     ext = Path(filename).suffix.lower()
     mime_map = {
+        # Images
         ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
         ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml",
+        ".ico": "image/x-icon", ".bmp": "image/bmp", ".tiff": "image/tiff",
+        ".avif": "image/avif", ".heic": "image/heic",
+        # Video
+        ".mp4": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime",
+        ".avi": "video/x-msvideo", ".mkv": "video/x-matroska",
+        ".m4v": "video/x-m4v", ".ogv": "video/ogg", ".3gp": "video/3gpp",
+        # Audio
+        ".mp3": "audio/mpeg", ".ogg": "audio/ogg", ".wav": "audio/wav",
+        ".aac": "audio/aac", ".m4a": "audio/x-m4a", ".flac": "audio/flac",
+        ".opus": "audio/opus", ".weba": "audio/webm",
+        # Documents & data
         ".pdf": "application/pdf", ".json": "application/json",
         ".txt": "text/plain", ".csv": "text/csv", ".html": "text/html",
-        ".css": "text/css", ".js": "application/javascript",
-        ".ts": "application/typescript", ".mp4": "video/mp4",
-        ".mp3": "audio/mpeg", ".zip": "application/zip",
+        ".htm": "text/html", ".css": "text/css", ".js": "application/javascript",
+        ".ts": "application/typescript", ".xml": "application/xml",
+        ".zip": "application/zip", ".gz": "application/gzip",
+        ".tar": "application/x-tar",
+        # Fonts
+        ".woff": "font/woff", ".woff2": "font/woff2",
+        ".ttf": "font/ttf", ".otf": "font/otf",
     }
     return mime_map.get(ext, "application/octet-stream")
 
