@@ -19,25 +19,15 @@ Backup and restore Supabase Storage buckets (config + all files) across projects
 
 ## ⚡ Quick Start
 
-```bash
-# List all buckets on a project
-python supabase-storage-copy.py list \
-  --project-ref abcdefghijklmnop \
-  --token sbp_xxxxxxxxxxxx \
-  --service-key eyJhbGci...
+```cmd
+REM List all buckets on a project
+python supabase-storage-copy.py list --project-ref abcdefghijklmnop --token sbp_xxxxxxxxxxxx --service-key eyJhbGci...
 
-# Backup all buckets to a local directory
-python supabase-storage-copy.py backup \
-  --project-ref abcdefghijklmnop \
-  --token sbp_xxxxxxxxxxxx \
-  --service-key eyJhbGci...
+REM Backup all buckets to a local directory
+python supabase-storage-copy.py backup --project-ref abcdefghijklmnop --token sbp_xxxxxxxxxxxx --service-key eyJhbGci...
 
-# Restore to a different project
-python supabase-storage-copy.py restore \
-  --project-ref newprojectref \
-  --token sbp_xxxxxxxxxxxx \
-  --service-key eyJhbGci... \
-  --dir storage_backup_abcdefghijklmnop
+REM Restore to a different project
+python supabase-storage-copy.py restore --project-ref newprojectref --token sbp_xxxxxxxxxxxx --service-key eyJhbGci... --dir storage_backup_abcdefghijklmnop
 ```
 
 ---
@@ -55,11 +45,11 @@ python supabase-storage-copy.py restore \
 
 *Can be set via environment variable instead.
 
-```bash
-# List buckets only
+```cmd
+REM List buckets only
 python supabase-storage-copy.py list --project-ref abcdefghijklmnop
 
-# List buckets and their file contents
+REM List buckets and their file contents
 python supabase-storage-copy.py list --project-ref abcdefghijklmnop --files
 ```
 
@@ -75,14 +65,14 @@ python supabase-storage-copy.py list --project-ref abcdefghijklmnop --files
 | `--dir` | No | `storage_backup_<project-ref>` | Directory to save backups into |
 | `--buckets` | No | *(all buckets)* | Space-separated list of bucket IDs to back up |
 
-```bash
-# Backup all buckets (default dir)
+```cmd
+REM Backup all buckets (default dir)
 python supabase-storage-copy.py backup --project-ref abcdefghijklmnop
 
-# Backup specific buckets only
+REM Backup specific buckets only
 python supabase-storage-copy.py backup --project-ref abcdefghijklmnop --buckets avatars documents
 
-# Backup to a custom directory (Windows)
+REM Backup to a custom directory
 python supabase-storage-copy.py backup --project-ref abcdefghijklmnop --dir C:\Backups\my-project
 ```
 
@@ -110,40 +100,25 @@ python supabase-storage-copy.py backup --project-ref abcdefghijklmnop --dir C:\B
 
 **Restoring to the same project** (default `--dir` works automatically):
 
-```bash
+```cmd
 python supabase-storage-copy.py restore --project-ref abcdefghijklmnop --service-key eyJhbGci...
 ```
 
 **Restoring to a DIFFERENT project** — use `--dir` to point at the source project's backup:
 
-```bash
-python supabase-storage-copy.py restore \
-  --project-ref newprojectref \
-  --service-key eyJhbGci... \
-  --dir storage_backup_abcdefghijklmnop
+```cmd
+python supabase-storage-copy.py restore --project-ref newprojectref --service-key eyJhbGci... --dir storage_backup_abcdefghijklmnop
 ```
 
-```bash
-# Restore specific buckets only
-python supabase-storage-copy.py restore \
-  --project-ref newprojectref \
-  --service-key eyJhbGci... \
-  --dir storage_backup_abcdefghijklmnop \
-  --buckets avatars documents
+```cmd
+REM Restore specific buckets only
+python supabase-storage-copy.py restore --project-ref newprojectref --service-key eyJhbGci... --dir storage_backup_abcdefghijklmnop --buckets avatars documents
 
-# Preview without uploading anything
-python supabase-storage-copy.py restore \
-  --project-ref newprojectref \
-  --service-key eyJhbGci... \
-  --dir storage_backup_abcdefghijklmnop \
-  --dry-run
+REM Preview without uploading anything
+python supabase-storage-copy.py restore --project-ref newprojectref --service-key eyJhbGci... --dir storage_backup_abcdefghijklmnop --dry-run
 
-# Overwrite existing buckets entirely
-python supabase-storage-copy.py restore \
-  --project-ref newprojectref \
-  --service-key eyJhbGci... \
-  --dir storage_backup_abcdefghijklmnop \
-  --mode overwrite
+REM Overwrite existing buckets entirely
+python supabase-storage-copy.py restore --project-ref newprojectref --service-key eyJhbGci... --dir storage_backup_abcdefghijklmnop --mode overwrite
 ```
 
 > 💡 If you forget `--dir`, the script will print the available backup folders to help you find the right one.
@@ -212,29 +187,22 @@ storage_backup_abcdefghijklmnop/
 ## 🔄 Typical Workflows
 
 **Clone a project's storage to a new project:**
-```bash
-# 1. Back up source
+```cmd
+REM 1. Back up source
 python supabase-storage-copy.py backup --project-ref sourceref
 
-# 2. Restore to target
-python supabase-storage-copy.py restore \
-  --project-ref targetref \
-  --service-key eyJhbGci... \
-  --dir storage_backup_sourceref
+REM 2. Restore to target
+python supabase-storage-copy.py restore --project-ref targetref --service-key eyJhbGci... --dir storage_backup_sourceref
 ```
 
 **Regular backup of a live project:**
-```bash
+```cmd
 python supabase-storage-copy.py backup --project-ref abcdefghijklmnop
 ```
 
 **Preview a restore before committing:**
-```bash
-python supabase-storage-copy.py restore \
-  --project-ref targetref \
-  --service-key eyJhbGci... \
-  --dir storage_backup_sourceref \
-  --dry-run
+```cmd
+python supabase-storage-copy.py restore --project-ref targetref --service-key eyJhbGci... --dir storage_backup_sourceref --dry-run
 ```
 
 ---

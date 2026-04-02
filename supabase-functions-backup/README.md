@@ -22,16 +22,14 @@ The tool talks to the [Supabase Management API](https://supabase.com/docs/refere
 
 If your credentials are set as environment variables (see [🌍 Environment Variables](#-environment-variables)), a backup is just:
 
-```bash
+```cmd
 python supabase-functions-backup.py backup --project-ref abcdefghijklmnop
 ```
 
 Or passing the token explicitly:
 
-```bash
-python supabase-functions-backup.py backup \
-  --project-ref abcdefghijklmnop \
-  --token sbp_xxxxxxxxxxxxxxxxxxxx
+```cmd
+python supabase-functions-backup.py backup --project-ref abcdefghijklmnop --token sbp_xxxxxxxxxxxxxxxxxxxx
 ```
 
 **Example output:**
@@ -60,7 +58,7 @@ python supabase-functions-backup.py backup \
 
 ### `backup` — Download all Edge Functions to disk
 
-```bash
+```cmd
 python supabase-functions-backup.py backup [options]
 ```
 
@@ -70,17 +68,11 @@ python supabase-functions-backup.py backup [options]
 | `--token` | ✅ Yes* | `SUPABASE_ACCESS_TOKEN` env var | Your Supabase Personal Access Token |
 | `--dir` | No | `edge_functions_backup_<project-ref>` | Path to the directory to save the backup into. Defaults to a folder named after your project ref so each project gets its own isolated backup. Created automatically if it doesn't exist. Accepts relative or absolute paths. |
 
-```bash
-# Relative path (macOS / Linux)
-python supabase-functions-backup.py backup \
-  --project-ref abcdefghijklmnop \
-  --token sbp_xxxxxxxxxxxxxxxxxxxx \
-  --dir ./my-backup
-
-# Relative path (Windows — both separators work)
+```cmd
+REM Relative path
 python supabase-functions-backup.py backup --project-ref abcdefghijklmnop --token sbp_xxxxxxxxxxxxxxxxxxxx --dir .\my-backup
 
-# Absolute path (Windows)
+REM Absolute path
 python supabase-functions-backup.py backup --project-ref abcdefghijklmnop --token sbp_xxxxxxxxxxxxxxxxxxxx --dir C:\Backups\supabase
 ```
 
@@ -88,7 +80,7 @@ python supabase-functions-backup.py backup --project-ref abcdefghijklmnop --toke
 
 ### `restore` — Deploy functions from a backup to a project
 
-```bash
+```cmd
 python supabase-functions-backup.py restore [options]
 ```
 
@@ -102,39 +94,31 @@ python supabase-functions-backup.py restore [options]
 
 **Restoring to the same project** (default `--dir` works automatically):
 
-```bash
+```cmd
 python supabase-functions-backup.py restore --project-ref abcdefghijklmnop
 ```
 
 **Restoring to a DIFFERENT project** — you must use `--dir` to point at the source project's backup folder, since the default folder is named after the *target* project ref, not the source:
 
-```bash
-python supabase-functions-backup.py restore \
-  --project-ref newprojectref \
-  --dir edge_functions_backup_abcdefghijklmnop
+```cmd
+python supabase-functions-backup.py restore --project-ref newprojectref --dir edge_functions_backup_abcdefghijklmnop
 ```
 
 > 💡 If you forget `--dir`, the script will print the available backup folders and their source project refs to help you find the right one.
 
-```bash
-# Restore only specific functions
-python supabase-functions-backup.py restore \
-  --project-ref newprojectref \
-  --dir edge_functions_backup_abcdefghijklmnop \
-  --slugs send-email process-webhook
+```cmd
+REM Restore only specific functions
+python supabase-functions-backup.py restore --project-ref newprojectref --dir edge_functions_backup_abcdefghijklmnop --slugs send-email process-webhook
 
-# Preview without deploying anything
-python supabase-functions-backup.py restore \
-  --project-ref newprojectref \
-  --dir edge_functions_backup_abcdefghijklmnop \
-  --dry-run
+REM Preview without deploying anything
+python supabase-functions-backup.py restore --project-ref newprojectref --dir edge_functions_backup_abcdefghijklmnop --dry-run
 ```
 
 ---
 
 ### `list` — List all Edge Functions on a project
 
-```bash
+```cmd
 python supabase-functions-backup.py list [options]
 ```
 
@@ -143,10 +127,8 @@ python supabase-functions-backup.py list [options]
 | `--project-ref` | ✅ Yes* | `SUPABASE_PROJECT_REF` env var | Project to list functions from |
 | `--token` | ✅ Yes* | `SUPABASE_ACCESS_TOKEN` env var | Your Supabase Personal Access Token |
 
-```bash
-python supabase-functions-backup.py list \
-  --project-ref abcdefghijklmnop \
-  --token sbp_xxxxxxxxxxxxxxxxxxxx
+```cmd
+python supabase-functions-backup.py list --project-ref abcdefghijklmnop --token sbp_xxxxxxxxxxxxxxxxxxxx
 ```
 
 > \* Required unless the corresponding environment variable is set — see [🌍 Environment Variables](#-environment-variables) below.
@@ -160,23 +142,21 @@ Set these to avoid passing `--token` and `--project-ref` on every command:
 | `SUPABASE_ACCESS_TOKEN` | Your Personal Access Token (`sbp_...`) |
 | `SUPABASE_PROJECT_REF` | Your project reference ID |
 
-```bash
-# Windows (Command Prompt)
+```cmd
+REM Command Prompt
 set SUPABASE_ACCESS_TOKEN=sbp_your_token_here
 set SUPABASE_PROJECT_REF=your-project-ref
+```
 
-# Windows (PowerShell)
+```powershell
+# PowerShell
 $env:SUPABASE_ACCESS_TOKEN="sbp_your_token_here"
 $env:SUPABASE_PROJECT_REF="your-project-ref"
-
-# macOS / Linux
-export SUPABASE_ACCESS_TOKEN=sbp_your_token_here
-export SUPABASE_PROJECT_REF=your-project-ref
 ```
 
 Once set, commands simplify to:
 
-```bash
+```cmd
 python supabase-functions-backup.py backup
 python supabase-functions-backup.py list
 ```
@@ -224,28 +204,21 @@ For each function the tool saves:
 
 **Clone functions to a staging environment:**
 
-```bash
-python supabase-functions-backup.py backup --project-ref prod-ref --dir ./prod-backup
-python supabase-functions-backup.py restore --project-ref staging-ref --dir ./prod-backup
+```cmd
+python supabase-functions-backup.py backup --project-ref prod-ref --dir .\prod-backup
+python supabase-functions-backup.py restore --project-ref staging-ref --dir .\prod-backup
 ```
 
-**Nightly backup via cron (macOS/Linux):**
+**Nightly backup via Task Scheduler (Windows):**
 
-```bash
-#!/bin/bash
-DATE=$(date +%Y-%m-%d)
-python supabase-functions-backup.py backup \
-  --project-ref $SUPABASE_PROJECT_REF \
-  --dir "/backups/edge-functions/$DATE"
+```cmd
+python supabase-functions-backup.py backup --project-ref %SUPABASE_PROJECT_REF% --dir C:\Backups\edge-functions
 ```
 
 **Selective restore after an incident:**
 
-```bash
-python supabase-functions-backup.py restore \
-  --project-ref prod-ref \
-  --dir ./last-known-good \
-  --slugs broken-function
+```cmd
+python supabase-functions-backup.py restore --project-ref prod-ref --dir .\last-known-good --slugs broken-function
 ```
 
 ## ⚠️ Important Notes
