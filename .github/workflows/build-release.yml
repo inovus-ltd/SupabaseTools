@@ -1,0 +1,133 @@
+name: Build & Release
+
+# Triggers on a pushed version tag like v1.0.0
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            suffix: windows
+            ext: .exe
+          - os: ubuntu-latest
+            suffix: linux
+            ext: ""
+          - os: macos-latest
+            suffix: macos
+            ext: ""
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build dependencies
+        run: pip install -r requirements-build.txt
+
+      - name: Install runtime dependencies
+        run: pip install requests
+
+      - name: Build executables
+        shell: bash
+        run: |
+          mkdir -p dist
+
+          tools=(
+            "supabase-functions-backup/supabase-functions-backup.py:supabase-functions-backup"
+            "supabase-storage-copy/supabase-storage-copy.py:supabase-storage-copy"
+            "supabase-auth-copy/supabase-auth-copy.py:supabase-auth-copy"
+            "supabase-secrets-manager/supabase-secrets-manager.py:supabase-secrets-manager"
+          )
+
+          for entry in "${tools[@]}"; do
+            script="${entry%%:*}"
+            name="${entry##*:}"
+            echo "Building $name from $script..."
+            pyinstaller --onefile --noconfirm --clean \
+              --name "$name" \
+              --distpath dist \
+              "$script"
+          done
+
+      - name: Rename with platform suffix
+        shell: bash
+        run: |
+          cd dist
+          for f in *; do
+            # Skip already-renamed files and directories
+            [[ -d "$f" ]] && continue
+            # Strip .exe if present, add platform suffix
+            base="${f%.exe}"
+            ext="${f##*.}"
+            if [[ "$f" == *.exe ]]; then
+              mv "$f" "${base}-${{ matrix.suffix }}.exe"
+            else
+              mv "$f" "${f}-${{ matrix.suffix }}"
+            fi
+          done
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.suffix }}
+          path: dist/*
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List built files
+        run: ls -lh dist/
+
+      - name: Create Release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          body: |
+            ## SupabaseTools ${{ github.ref_name }}
+
+            Standalone executables — no Python installation required.
+
+            ### Downloads
+
+            | Tool | Windows | macOS | Linux |
+            |------|---------|-------|-------|
+            | supabase-functions-backup | [⬇ .exe](../../releases/download/${{ github.ref_name }}/supabase-functions-backup-windows.exe) | [⬇ binary](../../releases/download/${{ github.ref_name }}/supabase-functions-backup-macos) | [⬇ binary](../../releases/download/${{ github.ref_name }}/supabase-functions-backup-linux) |
+            | supabase-storage-copy | [⬇ .exe](../../releases/download/${{ github.ref_name }}/supabase-storage-copy-windows.exe) | [⬇ binary](../../releases/download/${{ github.ref_name }}/supabase-storage-copy-macos) | [⬇ binary](../../releases/download/${{ github.ref_name }}/supabase-storage-copy-linux) |
+            | supabase-auth-copy | [⬇ .exe](../../releases/download/${{ github.ref_name }}/supabase-auth-copy-windows.exe) | [⬇ binary](../../releases/download/${{ github.ref_name }}/supabase-auth-copy-macos) | [⬇ binary](../../releases/download/${{ github.ref_name }}/supabase-auth-copy-linux) |
+            | supabase-secrets-manager | [⬇ .exe](../../releases/download/${{ github.ref_name }}/supabase-secrets-manager-windows.exe) | [⬇ binary](../../releases/download/${{ github.ref_name }}/supabase-secrets-manager-macos) | [⬇ binary](../../releases/download/${{ github.ref_name }}/supabase-secrets-manager-linux) |
+
+            ### Usage (Windows example)
+            ```cmd
+            supabase-functions-backup-windows.exe list --project-ref abcdefghijklmnop --token sbp_xxxx
+            supabase-storage-copy-windows.exe backup --project-ref abcdefghijklmnop --token sbp_xxxx --service-key eyJ...
+            supabase-auth-copy-windows.exe restore --project-ref newref --token sbp_xxxx --dir auth_backup_abcdefghijklmnop
+            supabase-secrets-manager-windows.exe list --project-ref abcdefghijklmnop --token sbp_xxxx
+            ```
+
+            > **Note:** On macOS/Linux, make the binary executable first: `chmod +x supabase-functions-backup-macos`
+            >
+            > **Windows:** If Windows Defender warns about the file, click **More info → Run anyway**.
