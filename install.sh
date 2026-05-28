@@ -5,7 +5,7 @@
 #  installs them to /usr/local/bin (requires sudo).
 #
 #  Usage (one-liner):
-#    curl -fsSL https://raw.githubusercontent.com/inovus-ltd/SupabaseTools/main/install.sh | sudo bash
+#    curl -fsSL https://raw.githubusercontent.com/inovus-ltd/SupabaseTools/master/install.sh | sudo bash
 #
 #  Or if you have the file locally:
 #    sudo bash install.sh
@@ -51,7 +51,7 @@ if [ "$EUID" -ne 0 ]; then
     echo ""
     echo -e " ${RED}ERROR: This installer must be run with sudo.${RESET}"
     echo -e " ${YELLOW}       Re-run as: sudo bash install.sh${RESET}"
-    echo -e " ${YELLOW}       Or use the one-liner: curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | sudo bash${RESET}"
+    echo -e " ${YELLOW}       Or use the one-liner: curl -fsSL https://raw.githubusercontent.com/${REPO}/master/install.sh | sudo bash${RESET}"
     exit 1
 fi
 

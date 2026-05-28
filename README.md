@@ -8,12 +8,12 @@ Install all tools with a single command — no Python needed.
 
 **Windows** (run PowerShell as Administrator):
 ```powershell
-irm https://raw.githubusercontent.com/inovus-ltd/SupabaseTools/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/inovus-ltd/SupabaseTools/master/install.ps1 | iex
 ```
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/inovus-ltd/SupabaseTools/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/inovus-ltd/SupabaseTools/master/install.sh | sudo bash
 ```
 
 All 4 tools are downloaded from the latest GitHub Release and placed on your system PATH. Open a new terminal and they're ready to use.

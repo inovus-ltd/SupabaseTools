@@ -5,7 +5,7 @@
 #  available from any terminal without any PATH changes.
 #
 #  Usage (run as Administrator):
-#    irm https://raw.githubusercontent.com/inovus-ltd/SupabaseTools/main/install.ps1 | iex
+#    irm https://raw.githubusercontent.com/inovus-ltd/SupabaseTools/master/install.ps1 | iex
 #
 #  Or if you have the file locally:
 #    .\install.ps1
