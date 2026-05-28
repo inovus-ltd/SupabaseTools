@@ -608,14 +608,14 @@ def main():
 
     api = SupabaseManagementAPI(args.token)
 
-    # Resolve --dir default to a project-scoped folder so each project's
-    # backup lives in its own directory and can't be confused with another.
-    backup_dir = args.dir if args.dir else f"{DEFAULT_BACKUP_DIR_PREFIX}_{args.project_ref}"
-
     if args.command == "backup":
+        # Resolve --dir default to a project-scoped folder so each project's
+        # backup lives in its own directory and can't be confused with another.
+        backup_dir = args.dir if args.dir else f"{DEFAULT_BACKUP_DIR_PREFIX}_{args.project_ref}"
         do_backup(api, args.project_ref, backup_dir)
 
     elif args.command == "restore":
+        backup_dir = args.dir if args.dir else f"{DEFAULT_BACKUP_DIR_PREFIX}_{args.project_ref}"
         do_restore(
             api,
             args.project_ref,
