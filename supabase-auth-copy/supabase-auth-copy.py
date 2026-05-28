@@ -54,6 +54,34 @@ except ImportError:
 MANAGEMENT_API_BASE = "https://api.supabase.com/v1"
 DEFAULT_BACKUP_DIR_PREFIX = "auth_backup"
 
+
+def _default_backup_root() -> Path:
+    """
+    Return a safe, user-writable directory for storing backups.
+    Resolves to ~/Documents/SupabaseTools to avoid writing into system
+    directories (e.g. System32) when the exe is installed there.
+
+    Returns:
+        Path: Guaranteed-to-exist base directory for backups.
+    """
+    base = Path.home() / "Documents" / "SupabaseTools"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def _exe_name() -> str:
+    """
+    Return the name of the current executable for use in help/hint text.
+    When frozen by PyInstaller sys.frozen is True and we use sys.executable.
+    When running as a plain script we use the script filename.
+
+    Returns:
+        str: Command name to show in restore hints.
+    """
+    if getattr(sys, 'frozen', False):
+        return Path(sys.executable).name
+    return "python supabase-auth-copy.py"
+
 # Courtesy delay between API calls.
 REQUEST_DELAY_SECONDS = 0.2
 
@@ -486,9 +514,11 @@ def do_backup(api: SupabaseAuthAPI, project_ref: str, backup_dir: str):
 
     print(f"\n  Backup complete.")
     print(f"  Manifest: {manifest_path.resolve()}")
+    cmd = _exe_name()
+    dir_arg = root.name
     print(f"\n  To restore:")
-    print(f"    Same project:      python supabase-auth-copy.py restore --project-ref {project_ref} --dir {root}")
-    print(f"    Different project: python supabase-auth-copy.py restore --project-ref <target-ref> --dir {root}")
+    print(f"    Same project:      {cmd} restore --project-ref {project_ref} --dir {dir_arg}")
+    print(f"    Different project: {cmd} restore --project-ref <target-ref> --dir {dir_arg}")
     print()
 
 
@@ -761,11 +791,13 @@ def main():
         do_list(api)
 
     elif args.command == "backup":
-        backup_dir = args.dir or f"{DEFAULT_BACKUP_DIR_PREFIX}_{args.project_ref}"
+        # Resolve --dir: explicit arg wins; otherwise use ~/Documents/SupabaseTools/<prefix>_<ref>
+        # so backups are never written into system directories (e.g. System32).
+        backup_dir = args.dir or str(_default_backup_root() / f"{DEFAULT_BACKUP_DIR_PREFIX}_{args.project_ref}")
         do_backup(api, project_ref=args.project_ref, backup_dir=backup_dir)
 
     elif args.command == "restore":
-        backup_dir = args.dir or f"{DEFAULT_BACKUP_DIR_PREFIX}_{args.project_ref}"
+        backup_dir = args.dir or str(_default_backup_root() / f"{DEFAULT_BACKUP_DIR_PREFIX}_{args.project_ref}")
         do_restore(
             api,
             backup_dir=backup_dir,

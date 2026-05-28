@@ -55,6 +55,35 @@ except ImportError:
 MANAGEMENT_API_BASE = "https://api.supabase.com/v1"
 DEFAULT_BACKUP_DIR_PREFIX = "edge_functions_backup"
 
+
+def _default_backup_root() -> Path:
+    """
+    Return a safe, user-writable directory for storing backups.
+    Resolves to ~/Documents/SupabaseTools, which is appropriate on all
+    platforms and avoids writing into system directories (e.g. System32)
+    when the exe is installed there.
+
+    Returns:
+        Path: Guaranteed-to-exist base directory for backups.
+    """
+    base = Path.home() / "Documents" / "SupabaseTools"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def _exe_name() -> str:
+    """
+    Return the name of the current executable for use in help/hint text.
+    When frozen by PyInstaller sys.frozen is True and we use sys.executable.
+    When running as a plain script we use the script filename.
+
+    Returns:
+        str: Command name to show in restore hints.
+    """
+    if getattr(sys, 'frozen', False):
+        return Path(sys.executable).name
+    return "python supabase-functions-backup.py"
+
 # The Management API allows 120 requests/min per project. We add a small
 # courtesy delay between calls to stay well within limits.
 REQUEST_DELAY_SECONDS = 0.3
@@ -323,10 +352,12 @@ def do_backup(api: SupabaseManagementAPI, project_ref: str, backup_dir: str):
 
     print(f"\n  Backup complete. {len(functions)} function(s) saved.")
     print(f"  Manifest: {manifest_path.resolve()}")
+    cmd = _exe_name()
+    dir_arg = root.name
     print(f"\n  To restore these functions:")
-    print(f"    Same project:      python supabase-functions-backup.py restore --project-ref {project_ref}")
-    print(f"    Different project: python supabase-functions-backup.py restore --project-ref <target-ref> --dir {root}")
-    print(f"    e.g.               python supabase-functions-backup.py restore --project-ref abcdefghijklmnop --dir {root}")
+    print(f"    Same project:      {cmd} restore --project-ref {project_ref}")
+    print(f"    Different project: {cmd} restore --project-ref <target-ref> --dir {dir_arg}")
+    print(f"    e.g.               {cmd} restore --project-ref abcdefghijklmnop --dir {dir_arg}")
     print()
 
 
@@ -357,7 +388,7 @@ def do_restore(
         print("  The backup folder is named after the SOURCE project, not the restore target.")
         print()
         print("  Use --dir to point at the correct backup folder, e.g.:")
-        print(f"    python supabase-functions-backup.py restore --project-ref {project_ref} --dir edge_functions_backup_<source-project-ref>")
+        print(f"    {_exe_name()} restore --project-ref {project_ref} --dir edge_functions_backup_<source-project-ref>")
         print()
         print("  Available backup folders in the current directory:")
         found_any = False
@@ -609,13 +640,13 @@ def main():
     api = SupabaseManagementAPI(args.token)
 
     if args.command == "backup":
-        # Resolve --dir default to a project-scoped folder so each project's
-        # backup lives in its own directory and can't be confused with another.
-        backup_dir = args.dir if args.dir else f"{DEFAULT_BACKUP_DIR_PREFIX}_{args.project_ref}"
+        # Resolve --dir: explicit arg wins; otherwise use ~/Documents/SupabaseTools/<prefix>_<ref>
+        # so backups are never written into system directories (e.g. System32).
+        backup_dir = args.dir if args.dir else str(_default_backup_root() / f"{DEFAULT_BACKUP_DIR_PREFIX}_{args.project_ref}")
         do_backup(api, args.project_ref, backup_dir)
 
     elif args.command == "restore":
-        backup_dir = args.dir if args.dir else f"{DEFAULT_BACKUP_DIR_PREFIX}_{args.project_ref}"
+        backup_dir = args.dir if args.dir else str(_default_backup_root() / f"{DEFAULT_BACKUP_DIR_PREFIX}_{args.project_ref}")
         do_restore(
             api,
             args.project_ref,
