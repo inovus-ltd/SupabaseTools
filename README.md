@@ -1,26 +1,120 @@
 # 🛠️ SupabaseTools
 
-A collection of tools for managing, automating, and maintaining [Supabase](https://supabase.com) projects.
+**Command-line tools for backing up, copying, and managing your [Supabase](https://supabase.com) projects.**
 
-## ⬇️ Install (No Python Required)
+Migrate storage buckets, clone auth settings, copy Edge Functions, and manage secrets — all from your terminal. No coding required.
 
-Install all tools with a single command — no Python needed.
+---
 
-**Windows** (run PowerShell as Administrator):
+## 🚀 Install in 30 Seconds
+
+No Python. No dependencies. Just paste one command and you're done.
+
+**Windows** — open PowerShell as Administrator and run:
+
 ```powershell
 irm https://raw.githubusercontent.com/inovus-ltd/SupabaseTools/master/install.ps1 | iex
 ```
 
 **macOS / Linux:**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/inovus-ltd/SupabaseTools/master/install.sh | sudo bash
 ```
 
-All 4 tools are downloaded from the latest GitHub Release and placed on your system PATH. Open a new terminal and they're ready to use.
+That's it. All 4 tools download automatically and are instantly available from any terminal window.
+
+> 💡 **Windows tip:** To open PowerShell as Administrator — right-click the Start button → *Windows PowerShell (Admin)*
+>
+> ⚠️ **Windows Defender warning?** If you see "Windows protected your PC", click **More info** then **Run anyway**. This is normal for unsigned executables downloaded from the internet.
 
 ---
 
-Or download individual executables manually from the [**Releases page**](../../releases/latest):
+## 🧰 What's Included
+
+| Tool | What it does |
+|------|-------------|
+| [**supabase-functions-backup**](./supabase-functions-backup/README.md) | Back up and restore your Edge Functions between projects |
+| [**supabase-storage-copy**](./supabase-storage-copy/README.md) | Back up and restore Storage buckets and all their files |
+| [**supabase-auth-copy**](./supabase-auth-copy/README.md) | Copy your Auth settings and third-party providers (e.g. Amazon Cognito) to another project |
+| [**supabase-secrets-manager**](./supabase-secrets-manager/README.md) | View and manage Edge Function secrets across projects |
+
+---
+
+## 🔑 Before You Start — Get Your Credentials
+
+Every tool needs two things: a **Personal Access Token** and your **Project Reference ID**.
+
+### Personal Access Token (PAT)
+
+This is the password that lets the tools talk to your Supabase account.
+
+1. Go to [supabase.com/dashboard/account/tokens](https://supabase.com/dashboard/account/tokens)
+2. Click **Generate new token**
+3. Give it a name like `backup-tool` and click **Generate**
+4. **Copy it immediately** — it's only shown once
+
+> 🔒 This token has access to **all projects** in your account. Keep it safe — treat it like a password and never share it or commit it to git.
+
+### Project Reference ID
+
+This is the unique ID for each of your Supabase projects. You'll need it for the source project you're backing up from, and the target project you're restoring to.
+
+**Find it here:** Open your project in the Supabase dashboard. Look at the URL:
+
+```
+https://supabase.com/dashboard/project/abcdefghijklmnop
+                                        ↑ this is your project ref
+```
+
+Or go to **Project Settings → General** and it's listed there as "Reference ID".
+
+---
+
+## ⚡ Quick Examples
+
+Once installed, here's what you can do. Replace `YOUR_REF` and `YOUR_TOKEN` with your real values.
+
+### Back up Edge Functions
+```
+supabase-functions-backup backup --project-ref YOUR_REF --token YOUR_TOKEN
+```
+
+### Copy Storage buckets from one project to another
+```
+supabase-storage-copy backup --project-ref SOURCE_REF --token YOUR_TOKEN --service-key YOUR_SERVICE_KEY
+supabase-storage-copy restore --project-ref TARGET_REF --token YOUR_TOKEN --service-key TARGET_SERVICE_KEY --dir storage_backup_SOURCE_REF
+```
+
+### Clone Auth settings to a new project
+```
+supabase-auth-copy backup --project-ref SOURCE_REF --token YOUR_TOKEN
+supabase-auth-copy restore --project-ref TARGET_REF --token YOUR_TOKEN --dir auth_backup_SOURCE_REF
+```
+
+### List Edge Function secrets
+```
+supabase-secrets-manager list --project-ref YOUR_REF --token YOUR_TOKEN
+```
+
+> 💡 **Tip:** Every command supports `--help` for full usage details, and `--dry-run` to preview what will happen before making any changes.
+
+---
+
+## 📖 Detailed Guides
+
+Each tool has its own README with full documentation, all commands, parameters, and real example output:
+
+- 📄 [supabase-functions-backup — full guide](./supabase-functions-backup/README.md)
+- 📄 [supabase-storage-copy — full guide](./supabase-storage-copy/README.md)
+- 📄 [supabase-auth-copy — full guide](./supabase-auth-copy/README.md)
+- 📄 [supabase-secrets-manager — full guide](./supabase-secrets-manager/README.md)
+
+---
+
+## 🪟 Prefer to Download Manually?
+
+If you'd rather download individual tools instead of using the installer:
 
 | Tool | Windows | macOS | Linux |
 |------|---------|-------|-------|
@@ -29,135 +123,60 @@ Or download individual executables manually from the [**Releases page**](../../r
 | supabase-auth-copy | [⬇ .exe](../../releases/latest/download/supabase-auth-copy-windows.exe) | [⬇ binary](../../releases/latest/download/supabase-auth-copy-macos) | [⬇ binary](../../releases/latest/download/supabase-auth-copy-linux) |
 | supabase-secrets-manager | [⬇ .exe](../../releases/latest/download/supabase-secrets-manager-windows.exe) | [⬇ binary](../../releases/latest/download/supabase-secrets-manager-macos) | [⬇ binary](../../releases/latest/download/supabase-secrets-manager-linux) |
 
-> **Windows:** If Windows Defender warns about the file, click **More info → Run anyway**.
->
-> **macOS / Linux:** Make the binary executable first: `chmod +x supabase-functions-backup-macos`
+Save the file somewhere on your computer, then run it from your terminal in that folder.
 
-Once downloaded, use exactly like the Python scripts — just replace `python supabase-functions-backup.py` with `supabase-functions-backup-windows.exe`:
-
-```cmd
-supabase-functions-backup-windows.exe list --project-ref abcdefghijklmnop --token sbp_xxxx
-supabase-storage-copy-windows.exe backup --project-ref abcdefghijklmnop --token sbp_xxxx --service-key eyJ...
-supabase-auth-copy-windows.exe restore --project-ref newref --token sbp_xxxx --dir auth_backup_abcdefghijklmnop
-supabase-secrets-manager-windows.exe list --project-ref abcdefghijklmnop --token sbp_xxxx
+**macOS / Linux only** — make it executable first:
+```bash
+chmod +x supabase-functions-backup-macos
+./supabase-functions-backup-macos list --project-ref YOUR_REF --token YOUR_TOKEN
 ```
 
 ---
 
-## 📦 Tools
+## 🛠️ Running from Source (Developers)
 
-| Tool | Description |
-|------|-------------|
-| [`supabase-functions-backup`](./supabase-functions-backup/README.md) | 🔄 Backup and restore Supabase Edge Functions using the Management API |
-| [`supabase-storage-copy`](./supabase-storage-copy/README.md) | 🗄️ Backup and restore Supabase Storage buckets (config + files) across projects |
-| [`supabase-secrets-manager`](./supabase-secrets-manager/README.md) | 🔑 List, add, update, and delete Edge Function secrets on any project |
-| [`supabase-auth-copy`](./supabase-auth-copy/README.md) | 🔐 Backup and restore Auth config and Third-Party Auth providers (e.g. Amazon Cognito) across projects |
+If you want to run the Python scripts directly or contribute to the project:
 
-## ✅ Prerequisites
-
-- 🐍 **Python 3.8+** — [python.org/downloads](https://www.python.org/downloads/)
-- 📦 **pip** — bundled with Python 3.4+; upgrade with `python -m pip install --upgrade pip`
-- 🌐 **`requests` library** — used by all HTTP-based tools: `pip install requests`
-- 🔑 **Supabase Personal Access Token (PAT)** — see [🔑 How to Get Your Token](#-how-to-get-your-token) below
-- 🗝️ **Supabase Service Role Key** *(storage tools only)* — found in *Project Settings → API → Project API Keys → service_role*
-- 🆔 **Supabase Project Reference ID** — the alphanumeric string in your project's dashboard URL:
-  `https://supabase.com/dashboard/project/abcdefghijklmnop` → ref is `abcdefghijklmnop`
-  Also found under *Project Settings → General* in the Supabase dashboard.
-
-## 🔑 How to Get Your Token
-
-1. Log in to [supabase.com](https://supabase.com)
-2. Click your **avatar** (top-right) → **Account Preferences**
-3. Go to [Account Preferences → Access Tokens](https://supabase.com/dashboard/account/tokens)
-4. Click **Generate new token**, give it a descriptive name (e.g. `backup-tool`), and copy the value
-
-> ⚠️ The token is shown **only once** — copy it immediately and store it somewhere safe (e.g. a password manager or a local `.env` file).
->
-> 🔒 This is an **account-level** token with access to **all projects** in your Supabase account. Treat it like a password and never commit it to version control.
-
-## 🚀 Getting Started
-
-**1. Clone this repository:**
-
+**1. Clone the repo:**
 ```bash
 git clone https://github.com/inovus-ltd/SupabaseTools.git
 cd SupabaseTools
 ```
 
-**2. (Recommended) Create and activate a virtual environment:**
-
-```bash
-# Windows
-python -m venv .venv
-.venv\Scripts\activate
-
-# macOS / Linux
-python -m venv .venv
-source .venv/bin/activate
-```
-
-**3. Install shared dependencies:**
-
+**2. Install the one dependency:**
 ```bash
 pip install requests
 ```
 
-**4. Set your credentials as environment variables** to avoid passing them on every call:
-
+**3. Run any tool directly:**
 ```bash
-# Windows (Command Prompt)
-set SUPABASE_ACCESS_TOKEN=sbp_your_token_here
-set SUPABASE_PROJECT_REF=your-project-ref
-
-# Windows (PowerShell)
-$env:SUPABASE_ACCESS_TOKEN="sbp_your_token_here"
-$env:SUPABASE_PROJECT_REF="your-project-ref"
-
-# macOS / Linux
-export SUPABASE_ACCESS_TOKEN=sbp_your_token_here
-export SUPABASE_PROJECT_REF=your-project-ref
+python supabase-functions-backup/supabase-functions-backup.py list --project-ref YOUR_REF --token YOUR_TOKEN
 ```
 
-**5.** Navigate to the tool you want to use and follow its `README.md`.
-
-## 🔨 Build Executables Locally
-
-If you want to build the standalone executables yourself (e.g. to test changes before a release):
-
-**Prerequisites:**
-```cmd
-pip install -r requirements-build.txt
-```
-
-**Build all tools (Command Prompt):**
-```cmd
-build-all.bat
-```
-
-**Build all tools (PowerShell):**
+**Building executables locally:**
 ```powershell
+pip install -r requirements-build.txt
 .\build-all.ps1
 ```
 
-Executables are written to `dist\`. The `build\` and `dist\` directories are gitignored.
-
-**Releasing a new version:** Push a tag and GitHub Actions builds all platform binaries automatically:
-```cmd
-git tag v1.0.0
-git push origin v1.0.0
+**Publishing a new release** — just push a version tag and GitHub Actions builds everything automatically:
+```bash
+git tag v1.2.0
+git push origin v1.2.0
 ```
 
 ---
 
-## 🤝 Contributing
+## 🔒 Security Notes
 
-Each tool lives in its own subdirectory. When adding a new tool:
-
-- Create a new subdirectory with a descriptive name (e.g. `supabase-migrate`)
-- Include a `README.md` covering prerequisites, parameters, usage, and examples
-- Add an entry to the table above
-
-## 🔒 Security
-
-- **Never commit tokens or project refs** to version control — use environment variables or a `.env` file (already gitignored)
-- Supabase Personal Access Tokens have **account-level access** to all your projects — treat them like passwords
+- **Tokens are never stored by these tools** — they're only used for the duration of each command
+- **Never commit your token** to version control — use environment variables instead:
+  ```powershell
+  # PowerShell — set once per session, no need to pass --token every time
+  $env:SUPABASE_ACCESS_TOKEN="sbp_your_token_here"
+  ```
+  ```bash
+  # macOS / Linux
+  export SUPABASE_ACCESS_TOKEN=sbp_your_token_here
+  ```
+- **Backups are local** — nothing is sent anywhere except directly to/from your Supabase projects via their official API
