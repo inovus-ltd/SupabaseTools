@@ -101,7 +101,184 @@ supabase-secrets-manager list --project-ref YOUR_REF --token YOUR_TOKEN
 
 ---
 
-## 📖 Detailed Guides
+## � How to Clone a Supabase Project
+
+Want to duplicate a project — for a staging environment, a new customer, or a safe place to test changes? Here's the complete step-by-step process.
+
+> ⏱️ **How long does this take?** About 10–20 minutes depending on your database and storage size.
+
+---
+
+### Step 1 — Restore the Database
+
+The database has to be done first through the Supabase dashboard. Everything else (functions, storage, auth) gets copied using SupabaseTools afterwards.
+
+1. Open the **source project** (the one you want to clone) in the [Supabase dashboard](https://supabase.com/dashboard)
+2. In the left menu go to **Database → Backups**
+3. Find a recent backup and click **Restore to a new project**
+4. Set a **new project name** and a **new database password** — store the password somewhere safe
+5. Click through and wait — this takes a few minutes
+
+> 💡 During restore Supabase will show you what the new project will inherit: all your tables, data, views, functions, indexes, roles and permissions.
+
+**What the database restore does NOT copy** — you'll handle these in the next steps:
+
+| ❌ Not copied automatically | ✅ Copied by SupabaseTools |
+|----------------------------|--------------------------|
+| Edge Functions | ✅ Step 3 below |
+| Storage buckets & files | ✅ Step 4 below |
+| Auth configuration | ✅ Step 5 below |
+| Edge Function secrets | ✅ Step 6 below |
+
+---
+
+### Step 2 — Get Set Up
+
+**Install SupabaseTools** if you haven't already (see [Install in 30 Seconds](#-install-in-30-seconds) above).
+
+**Gather the things you'll need before running any commands:**
+
+#### 🔑 Your Personal Access Token
+Go to [supabase.com/dashboard/account/tokens](https://supabase.com/dashboard/account/tokens), generate a token, and copy it. You'll use this for every command below.
+
+#### 🆔 Two Project Reference IDs
+You need the ref for the **source** (original) project and the **target** (new) project.
+
+Find each one in the dashboard URL:
+```
+https://supabase.com/dashboard/project/abcdefghijklmnop
+                                        ↑ this is the ref
+```
+
+#### 🗝️ Two Service Role Keys *(for Storage only)*
+In each project: go to **Project Settings → API** and copy the `service_role` key.
+You need one from the **source** project and one from the **target** project.
+
+> 🔒 Keep these safe — service role keys bypass Row Level Security and have full database access.
+
+---
+
+### Step 3 — Copy Edge Functions
+
+```
+supabase-functions-backup backup --project-ref SOURCE_REF --token YOUR_TOKEN
+supabase-functions-backup restore --project-ref TARGET_REF --token YOUR_TOKEN --dir edge_functions_backup_SOURCE_REF
+```
+
+**What gets copied:** Function source code, metadata, JWT settings, import maps, entrypoint config.
+
+**What doesn't:** Secrets — handled separately in Step 6.
+
+---
+
+### Step 4 — Copy Storage Buckets & Files
+
+```
+supabase-storage-copy backup --project-ref SOURCE_REF --token YOUR_TOKEN --service-key SOURCE_SERVICE_KEY
+supabase-storage-copy restore --project-ref TARGET_REF --token YOUR_TOKEN --service-key TARGET_SERVICE_KEY --dir storage_backup_SOURCE_REF --mode overwrite
+```
+
+> ⚠️ Make sure you use the **target** project's service role key for the restore command, not the source.
+
+**What gets copied:** All buckets, all files, folder structure, public/private settings, MIME types.
+
+**What doesn't:** Storage RLS policies — recreate these from your migrations or manually in the dashboard.
+
+---
+
+### Step 5 — Copy Auth Configuration
+
+```
+supabase-auth-copy backup --project-ref SOURCE_REF --token YOUR_TOKEN
+supabase-auth-copy restore --project-ref TARGET_REF --token YOUR_TOKEN --dir auth_backup_SOURCE_REF
+```
+
+**What gets copied:** Site URL, redirect URLs, JWT expiry, MFA settings, email/session config, OAuth provider on/off settings, Amazon Cognito integrations.
+
+**What doesn't:** Sensitive secrets (JWT secret, OAuth client secrets, SMTP password) — these are intentionally stripped for security. Re-enter them manually in **Project Settings → Auth** on the new project.
+
+---
+
+### Step 6 — Copy Edge Function Secrets
+
+Supabase's API doesn't let you export secret *values* — only names. So you need to have the values somewhere (like a `.env` file or a password manager).
+
+**See what secrets the source project has:**
+```
+supabase-secrets-manager list --project-ref SOURCE_REF --token YOUR_TOKEN
+```
+
+**Option A — push from a `.env` file** (easiest if you have one):
+```
+supabase-secrets-manager push --project-ref TARGET_REF --token YOUR_TOKEN --env-file .env.production
+```
+
+**Option B — enter them interactively:**
+```
+supabase-secrets-manager set --project-ref TARGET_REF --token YOUR_TOKEN
+```
+
+---
+
+### Step 7 — Final Checks ✅
+
+Run through this checklist before pointing any apps at the new project:
+
+**Database**
+- [ ] Tables and data look correct
+- [ ] RLS policies are in place
+
+**Edge Functions**
+- [ ] Functions show up in the dashboard
+- [ ] Secrets are configured
+- [ ] Test a function call — does it respond correctly?
+
+**Storage**
+- [ ] Buckets exist with correct public/private settings
+- [ ] A few files are accessible
+
+**Auth**
+- [ ] Can you log in?
+- [ ] OAuth providers work (check redirect URLs point to the new project URL)
+- [ ] Password reset / confirmation emails are sending
+
+**Your Application**
+- [ ] Update your app's environment variables to the new project URL and anon key
+- [ ] No hardcoded references to the old project ref anywhere
+- [ ] Third-party webhooks, OAuth callbacks, and SMTP settings updated
+
+> 💡 **New project URL and API keys** are found in the new project under **Project Settings → API**.
+
+---
+
+### Full Clone Command Reference
+
+Here's every command in one place — just substitute your values:
+
+```
+# Replace these with your real values:
+# SOURCE_REF     = project ref of the project you're cloning FROM
+# TARGET_REF     = project ref of the newly restored project
+# YOUR_TOKEN     = your Personal Access Token (sbp_...)
+# SOURCE_KEY     = service_role key from the SOURCE project
+# TARGET_KEY     = service_role key from the TARGET project
+
+supabase-functions-backup backup  --project-ref SOURCE_REF --token YOUR_TOKEN
+supabase-functions-backup restore --project-ref TARGET_REF --token YOUR_TOKEN --dir edge_functions_backup_SOURCE_REF
+
+supabase-storage-copy backup  --project-ref SOURCE_REF --token YOUR_TOKEN --service-key SOURCE_KEY
+supabase-storage-copy restore --project-ref TARGET_REF --token YOUR_TOKEN --service-key TARGET_KEY --dir storage_backup_SOURCE_REF --mode overwrite
+
+supabase-auth-copy backup  --project-ref SOURCE_REF --token YOUR_TOKEN
+supabase-auth-copy restore --project-ref TARGET_REF --token YOUR_TOKEN --dir auth_backup_SOURCE_REF
+
+supabase-secrets-manager list --project-ref SOURCE_REF --token YOUR_TOKEN
+supabase-secrets-manager push --project-ref TARGET_REF --token YOUR_TOKEN --env-file .env.production
+```
+
+---
+
+## �📖 Detailed Guides
 
 Each tool has its own README with full documentation, all commands, parameters, and real example output:
 
