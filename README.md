@@ -2,9 +2,25 @@
 
 A collection of tools for managing, automating, and maintaining [Supabase](https://supabase.com) projects.
 
-## ⬇️ Download (No Python Required)
+## ⬇️ Install (No Python Required)
 
-Grab the latest standalone executables from the [**Releases page**](../../releases/latest) — no Python installation needed, just download and run.
+Install all tools with a single command — no Python needed.
+
+**Windows** (run PowerShell as Administrator):
+```powershell
+irm https://raw.githubusercontent.com/inovus-ltd/SupabaseTools/main/install.ps1 | iex
+```
+
+**macOS / Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/inovus-ltd/SupabaseTools/main/install.sh | sudo bash
+```
+
+All 4 tools are downloaded from the latest GitHub Release and placed on your system PATH. Open a new terminal and they're ready to use.
+
+---
+
+Or download individual executables manually from the [**Releases page**](../../releases/latest):
 
 | Tool | Windows | macOS | Linux |
 |------|---------|-------|-------|
@@ -64,7 +80,7 @@ supabase-secrets-manager-windows.exe list --project-ref abcdefghijklmnop --token
 **1. Clone this repository:**
 
 ```bash
-git clone https://github.com/your-org/SupabaseTools.git
+git clone https://github.com/inovus-ltd/SupabaseTools.git
 cd SupabaseTools
 ```
 
