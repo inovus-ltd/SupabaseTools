@@ -53,15 +53,44 @@ if (-not $isAdmin) {
     exit 1
 }
 
+# -- Download helper with live progress dots ----------------------------------
+function Download-File {
+    param([string]$Url, [string]$Dest)
+    # Reason: HttpClient with manual streaming lets us print a dot every ~512KB
+    # so the user sees activity rather than a silent hang during large downloads.
+    $http = [System.Net.Http.HttpClient]::new()
+    $http.DefaultRequestHeaders.Add("User-Agent", "SupabaseTools-Installer")
+    try {
+        $response = $http.GetAsync($Url, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
+        $response.EnsureSuccessStatusCode() | Out-Null
+        $total = $response.Content.Headers.ContentLength
+        $stream = $response.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
+        $outStream = [System.IO.File]::Create($Dest)
+        $buf = New-Object byte[] 524288  # 512 KB chunks
+        $downloaded = 0
+        try {
+            while ($true) {
+                $read = $stream.Read($buf, 0, $buf.Length)
+                if ($read -le 0) { break }
+                $outStream.Write($buf, 0, $read)
+                $downloaded += $read
+                Write-Host "." -NoNewline
+            }
+        } finally {
+            $outStream.Close()
+            $stream.Close()
+        }
+        $sizeMB = [math]::Round($downloaded / 1MB, 1)
+        Write-Host " ${sizeMB} MB" -ForegroundColor Green
+    } finally {
+        $http.Dispose()
+    }
+}
+
 # -- Download and install each tool ------------------------------------------
 Write-Host " Installing to: $installDir"
-Write-Host " Note: each executable is ~15-20 MB — this may take a minute on slow connections."
+Write-Host " Note: each executable is ~15-20 MB — dots show download progress."
 Write-Host ""
-
-# Reason: WebClient.DownloadFile is significantly faster than Invoke-WebRequest
-# for large binary files and shows deterministic progress via DownloadProgressChanged.
-$wc = New-Object System.Net.WebClient
-$wc.Headers.Add("User-Agent", "SupabaseTools-Installer")
 
 foreach ($tool in $tools) {
     $filename = "$tool-windows.exe"
@@ -69,18 +98,15 @@ foreach ($tool in $tools) {
     $url      = "https://github.com/$repo/releases/download/$tag/$filename"
     $dest     = Join-Path $installDir $destName
 
-    Write-Host " Downloading $tool..." -NoNewline
+    Write-Host " $tool  " -NoNewline
     try {
-        $wc.DownloadFile($url, $dest)
-        $sizeMB = [math]::Round((Get-Item $dest).Length / 1MB, 1)
-        Write-Host " done (${sizeMB} MB)" -ForegroundColor Green
+        Download-File -Url $url -Dest $dest
     } catch {
         Write-Host " FAILED" -ForegroundColor Red
         Write-Host "   URL: $url" -ForegroundColor DarkGray
         Write-Host "   Error: $_" -ForegroundColor DarkGray
     }
 }
-$wc.Dispose()
 
 # -- Verify ------------------------------------------------------------------
 Write-Host ""
