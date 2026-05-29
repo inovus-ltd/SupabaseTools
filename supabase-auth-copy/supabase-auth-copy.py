@@ -185,6 +185,17 @@ PAID_PLAN_KEYS = {
     "hook_send_email_enabled",
     "hook_send_email_uri",
     "hook_send_email_secrets",
+    # Phone MFA is a paid Supabase add-on ($75/month). Restoring these keys
+    # when enabled on the source project would silently activate billing on
+    # the target project. Always skip — user must enable manually if wanted.
+    "mfa_phone_enroll_enabled",
+    "mfa_phone_verify_enabled",
+    "mfa_phone_template",
+    "mfa_phone_otp_length",
+    "mfa_phone_max_frequency",
+    # WebAuthn MFA is also a paid add-on — same risk as phone MFA above.
+    "mfa_web_authn_enroll_enabled",
+    "mfa_web_authn_verify_enabled",
 }
 
 
