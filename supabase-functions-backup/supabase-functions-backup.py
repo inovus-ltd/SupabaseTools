@@ -84,6 +84,43 @@ def _exe_name() -> str:
         return Path(sys.executable).name
     return "python supabase-functions-backup.py"
 
+
+def _resolve_dir(dir_arg, default_name: str) -> str:
+    """
+    Resolve a backup directory path from a CLI argument.
+
+    Resolution order:
+      1. If no arg given: use ~/Documents/SupabaseTools/<default_name>
+      2. If arg is an absolute path: use as-is
+      3. If arg is a bare name / relative path and exists in CWD: use CWD-relative
+      4. If arg is a bare name and exists in ~/Documents/SupabaseTools/: use that
+      5. Otherwise: fall back to ~/Documents/SupabaseTools/<arg> (will fail
+         gracefully with a clear error inside do_restore)
+
+    This means users can type just the folder name from the restore hint and
+    it will be found automatically regardless of their CWD.
+
+    Args:
+        dir_arg (str | None): Value of --dir from argparse, or None.
+        default_name (str): Folder name to use when no --dir given.
+
+    Returns:
+        str: Resolved absolute path string.
+    """
+    if not dir_arg:
+        return str(_default_backup_root() / default_name)
+    p = Path(dir_arg)
+    if p.is_absolute():
+        return str(p)
+    # Relative: check CWD first, then ~/Documents/SupabaseTools/
+    if p.exists():
+        return str(p.resolve())
+    candidate = _default_backup_root() / p
+    if candidate.exists():
+        return str(candidate)
+    # Neither found — return the Documents path so the error message is helpful
+    return str(_default_backup_root() / p)
+
 # The Management API allows 120 requests/min per project. We add a small
 # courtesy delay between calls to stay well within limits.
 REQUEST_DELAY_SECONDS = 0.3
@@ -640,13 +677,11 @@ def main():
     api = SupabaseManagementAPI(args.token)
 
     if args.command == "backup":
-        # Resolve --dir: explicit arg wins; otherwise use ~/Documents/SupabaseTools/<prefix>_<ref>
-        # so backups are never written into system directories (e.g. System32).
-        backup_dir = args.dir if args.dir else str(_default_backup_root() / f"{DEFAULT_BACKUP_DIR_PREFIX}_{args.project_ref}")
+        backup_dir = _resolve_dir(args.dir, f"{DEFAULT_BACKUP_DIR_PREFIX}_{args.project_ref}")
         do_backup(api, args.project_ref, backup_dir)
 
     elif args.command == "restore":
-        backup_dir = args.dir if args.dir else str(_default_backup_root() / f"{DEFAULT_BACKUP_DIR_PREFIX}_{args.project_ref}")
+        backup_dir = _resolve_dir(args.dir, f"{DEFAULT_BACKUP_DIR_PREFIX}_{args.project_ref}")
         do_restore(
             api,
             args.project_ref,
