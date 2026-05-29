@@ -26,7 +26,11 @@ That's it. All 4 tools download automatically and are instantly available from a
 
 > 💡 **Windows tip:** To open PowerShell as Administrator — right-click the Start button → *Windows PowerShell (Admin)*
 >
-> ⚠️ **Windows Defender warning?** If you see "Windows protected your PC", click **More info** then **Run anyway**. This is normal for unsigned executables downloaded from the internet.
+> ⚠️ **Windows Defender warning?** You may see a "Windows protected your PC" SmartScreen prompt the first time you run one of these tools. This happens because the executables are not commercially code-signed — not because they contain anything harmful. The full source code for every tool is right here in this repository and is openly auditable.
+>
+> To proceed: click **More info** → **Run anyway**.
+>
+> 🔐 **Security-conscious users:** If code signing matters to your organisation, you're warmly encouraged to **fork this repository**, add your own code signing certificate to the GitHub Actions workflow, and distribute your own signed builds to your team. The build pipeline is already set up — it just needs a certificate.
 
 ---
 
