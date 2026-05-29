@@ -56,31 +56,29 @@ if (-not $isAdmin) {
 # -- Download helper with live progress dots ----------------------------------
 function Get-RemoteFile {
     param([string]$Url, [string]$Dest)
-    # Reason: WebClient is available in PowerShell 5.1+. We hook DownloadProgressChanged
-    # to print a dot every 5% so the user sees activity instead of a silent hang.
-    $wc = New-Object System.Net.WebClient
-    $wc.Headers.Add("User-Agent", "SupabaseTools-Installer")
-
-    $lastPct = 0
-    $job = Register-ObjectEvent $wc DownloadProgressChanged -Action {
-        $pct = $EventArgs.ProgressPercentage
-        # Print a dot every 5 percentage points
-        while ($script:lastPct -lt $pct) {
-            $script:lastPct += 5
-            Write-Host "." -NoNewline
-        }
-    }
+    # Reason: Run the download in a background job and print one dot per second
+    # on the main thread. This keeps all output on a single line with no race
+    # conditions from cross-thread Write-Host calls.
+    $job = Start-Job -ScriptBlock {
+        param($u, $d)
+        $wc = New-Object System.Net.WebClient
+        $wc.Headers.Add("User-Agent", "SupabaseTools-Installer")
+        $wc.DownloadFile($u, $d)
+        $wc.Dispose()
+    } -ArgumentList $Url, $Dest
 
     try {
-        $script:lastPct = 0
-        $wc.DownloadFileTaskAsync($Url, $Dest).GetAwaiter().GetResult()
-        $sizeMB = [math]::Round((Get-Item $Dest).Length / 1MB, 1)
-        Write-Host " ${sizeMB} MB" -ForegroundColor Green
+        while ($job.State -eq "Running") {
+            Start-Sleep -Milliseconds 800
+            Write-Host "." -NoNewline
+        }
+        Receive-Job $job -ErrorAction Stop | Out-Null
     } finally {
-        Unregister-Event -SourceIdentifier $job.Name -ErrorAction SilentlyContinue
         Remove-Job $job -ErrorAction SilentlyContinue
-        $wc.Dispose()
     }
+
+    $sizeMB = [math]::Round((Get-Item $Dest).Length / 1MB, 1)
+    Write-Host " ${sizeMB} MB" -ForegroundColor Green
 }
 
 # -- Download and install each tool ------------------------------------------
