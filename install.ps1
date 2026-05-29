@@ -32,10 +32,11 @@ Write-Host ""
 Write-Host " Fetching latest release info..." -NoNewline
 $apiUrl  = "https://api.github.com/repos/$repo/releases/latest"
 try {
-    $release = Invoke-RestMethod -Uri $apiUrl -Headers @{ "User-Agent" = "SupabaseTools-Installer" }
+    $release = Invoke-RestMethod -Uri $apiUrl -Headers @{ "User-Agent" = "SupabaseTools-Installer" } -TimeoutSec 15
 } catch {
     Write-Host " FAILED" -ForegroundColor Red
-    Write-Error " Could not reach GitHub API: $_"
+    Write-Host " Could not reach GitHub API: $_" -ForegroundColor Red
+    Write-Host " Check your internet connection and try again." -ForegroundColor Yellow
     exit 1
 }
 $tag = $release.tag_name
@@ -54,7 +55,13 @@ if (-not $isAdmin) {
 
 # -- Download and install each tool ------------------------------------------
 Write-Host " Installing to: $installDir"
+Write-Host " Note: each executable is ~15-20 MB — this may take a minute on slow connections."
 Write-Host ""
+
+# Reason: WebClient.DownloadFile is significantly faster than Invoke-WebRequest
+# for large binary files and shows deterministic progress via DownloadProgressChanged.
+$wc = New-Object System.Net.WebClient
+$wc.Headers.Add("User-Agent", "SupabaseTools-Installer")
 
 foreach ($tool in $tools) {
     $filename = "$tool-windows.exe"
@@ -64,14 +71,16 @@ foreach ($tool in $tools) {
 
     Write-Host " Downloading $tool..." -NoNewline
     try {
-        Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
-        Write-Host " done" -ForegroundColor Green
+        $wc.DownloadFile($url, $dest)
+        $sizeMB = [math]::Round((Get-Item $dest).Length / 1MB, 1)
+        Write-Host " done (${sizeMB} MB)" -ForegroundColor Green
     } catch {
         Write-Host " FAILED" -ForegroundColor Red
         Write-Host "   URL: $url" -ForegroundColor DarkGray
         Write-Host "   Error: $_" -ForegroundColor DarkGray
     }
 }
+$wc.Dispose()
 
 # -- Verify ------------------------------------------------------------------
 Write-Host ""
