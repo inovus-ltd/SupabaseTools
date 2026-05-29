@@ -54,36 +54,32 @@ if (-not $isAdmin) {
 }
 
 # -- Download helper with live progress dots ----------------------------------
-function Download-File {
+function Get-RemoteFile {
     param([string]$Url, [string]$Dest)
-    # Reason: HttpClient with manual streaming lets us print a dot every ~512KB
-    # so the user sees activity rather than a silent hang during large downloads.
-    $http = [System.Net.Http.HttpClient]::new()
-    $http.DefaultRequestHeaders.Add("User-Agent", "SupabaseTools-Installer")
-    try {
-        $response = $http.GetAsync($Url, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
-        $response.EnsureSuccessStatusCode() | Out-Null
-        $total = $response.Content.Headers.ContentLength
-        $stream = $response.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
-        $outStream = [System.IO.File]::Create($Dest)
-        $buf = New-Object byte[] 524288  # 512 KB chunks
-        $downloaded = 0
-        try {
-            while ($true) {
-                $read = $stream.Read($buf, 0, $buf.Length)
-                if ($read -le 0) { break }
-                $outStream.Write($buf, 0, $read)
-                $downloaded += $read
-                Write-Host "." -NoNewline
-            }
-        } finally {
-            $outStream.Close()
-            $stream.Close()
+    # Reason: WebClient is available in PowerShell 5.1+. We hook DownloadProgressChanged
+    # to print a dot every 5% so the user sees activity instead of a silent hang.
+    $wc = New-Object System.Net.WebClient
+    $wc.Headers.Add("User-Agent", "SupabaseTools-Installer")
+
+    $lastPct = 0
+    $job = Register-ObjectEvent $wc DownloadProgressChanged -Action {
+        $pct = $EventArgs.ProgressPercentage
+        # Print a dot every 5 percentage points
+        while ($script:lastPct -lt $pct) {
+            $script:lastPct += 5
+            Write-Host "." -NoNewline
         }
-        $sizeMB = [math]::Round($downloaded / 1MB, 1)
+    }
+
+    try {
+        $script:lastPct = 0
+        $wc.DownloadFileTaskAsync($Url, $Dest).GetAwaiter().GetResult()
+        $sizeMB = [math]::Round((Get-Item $Dest).Length / 1MB, 1)
         Write-Host " ${sizeMB} MB" -ForegroundColor Green
     } finally {
-        $http.Dispose()
+        Unregister-Event -SourceIdentifier $job.Name -ErrorAction SilentlyContinue
+        Remove-Job $job -ErrorAction SilentlyContinue
+        $wc.Dispose()
     }
 }
 
@@ -100,7 +96,7 @@ foreach ($tool in $tools) {
 
     Write-Host " $tool  " -NoNewline
     try {
-        Download-File -Url $url -Dest $dest
+        Get-RemoteFile -Url $url -Dest $dest
     } catch {
         Write-Host " FAILED" -ForegroundColor Red
         Write-Host "   URL: $url" -ForegroundColor DarkGray
