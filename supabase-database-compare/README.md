@@ -25,6 +25,8 @@ You can run `compare` against production without risk of changing data, schema, 
 python supabase-database-compare.py compare --source-ref sourceref --target-ref targetref --token sbp_xxxxxxxxxxxx
 ```
 
+By default this opens a beautiful HTML report in your browser with an overall similarity score (green → red).
+
 With environment variables set (see [Environment Variables](../README.md#-environment-variables)):
 
 ```powershell
@@ -65,8 +67,9 @@ python supabase-database-compare.py list --project-ref abcdefghijklmnop --schema
 | `--deep` | No | false | Row-level data diff (see below) |
 | `--max-rows` | No | `1000` | Max rows per table in `--deep` mode |
 | `--output` | No | auto (text/html) | Report file path (`.json` or `.html`) |
-| `--format` | No | `text` | `text`, `json`, or `html` |
+| `--format` | No | `html` | `html` (default), `text`, or `json` |
 | `--quiet` | No | false | Suppress progress bar |
+| `--no-open` | No | false | Don't auto-open HTML in browser |
 
 \* Required unless the corresponding environment variable is set.
 
@@ -104,21 +107,20 @@ Postgres does not store a true "last written" time per table. This tool reports 
 
 ## Output
 
-**Console (default):** human-readable summary. SOURCE and TARGET project refs are labeled on every section. Tables with schema differences show **column-level detail** (not just table names).
+**HTML report (default):** saves to `~/Documents/SupabaseTools/compare_<source>_vs_<target>_<timestamp>.html` and **opens automatically in your browser**. Features:
 
-**Progress:** while comparing, a progress bar shows the current step (schema columns per table, Edge Functions, data checksums, last-write estimates). Use `--quiet` to disable.
+- Overall **similarity score** (0–100) with rating: Identical → Mostly Similar → Partially Similar → Mostly Different → Not Similar
+- Color-coded rows: **green** = match, **yellow** = partial difference, **red** = not similar
+- Per-category meters for Table Schemas, Edge Functions, and Table Data
+- Side-by-side Source vs Target with column-level schema diffs
 
-**JSON report:** saved automatically to `~/Documents/SupabaseTools/compare_<source>_vs_<target>_<timestamp>.json` when using `--format text`. Override with `--output`.
+Use `--no-open` to skip auto-opening the browser (e.g. in CI).
 
-**HTML report (recommended for readability):**
+**Progress:** while comparing, a progress bar shows the current step. Use `--quiet` to disable.
 
-```cmd
-python supabase-database-compare.py compare --source-ref sourceref --target-ref targetref --format html
-```
+**`--format text`:** console summary (also saves JSON alongside).
 
-Saves a self-contained HTML file with color-coded **SOURCE** (blue) and **TARGET** (green) columns, summary cards, schema diff tables, and side-by-side data/last-write comparisons. Open in any browser.
-
-**`--format json`:** prints the full report as JSON to stdout (progress still shown on stderr's terminal).
+**`--format json`:** saves JSON and prints to stdout.
 
 ## Environment Variables
 

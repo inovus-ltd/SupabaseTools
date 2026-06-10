@@ -32,6 +32,7 @@ import os
 import re
 import sys
 import time
+import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -852,207 +853,434 @@ def print_text_report(report: dict):
         print()
 
 
+def _category_score(identical: int, partial: int, missing: int) -> float:
+    """Score 0-100: identical=100, partial=50, missing/exclusive=0."""
+    total = identical + partial + missing
+    if total == 0:
+        return 100.0
+    return (identical * 100 + partial * 50) / total
+
+
+def _tier_from_score(score: float) -> tuple:
+    if score >= 90:
+        return "green", "Identical"
+    if score >= 70:
+        return "lime", "Mostly Similar"
+    if score >= 50:
+        return "yellow", "Partially Similar"
+    if score >= 25:
+        return "amber", "Mostly Different"
+    return "red", "Not Similar"
+
+
+def _compute_similarity(report: dict) -> dict:
+    """Overall and per-category similarity ratings."""
+    categories = []
+
+    ts = report["tables"]
+    schema_total = (
+        len(ts["identical"]) + len(ts["different"])
+        + len(ts["only_in_source"]) + len(ts["only_in_target"])
+    )
+    if schema_total:
+        schema_score = _category_score(
+            len(ts["identical"]), len(ts["different"]),
+            len(ts["only_in_source"]) + len(ts["only_in_target"]),
+        )
+        tier, label = _tier_from_score(schema_score)
+        categories.append({"name": "Table Schemas", "score": schema_score, "tier": tier, "label": label})
+
+    ef = report.get("edge_functions")
+    if ef is not None:
+        ef_total = (
+            len(ef["identical"]) + len(ef["different"])
+            + len(ef["only_in_source"]) + len(ef["only_in_target"])
+        )
+        if ef_total:
+            ef_score = _category_score(
+                len(ef["identical"]), len(ef["different"]),
+                len(ef["only_in_source"]) + len(ef["only_in_target"]),
+            )
+        else:
+            ef_score = 100.0
+        tier, label = _tier_from_score(ef_score)
+        categories.append({"name": "Edge Functions", "score": ef_score, "tier": tier, "label": label})
+
+    data = report.get("data")
+    if data is not None:
+        if "matching" in data:
+            data_total = len(data["matching"]) + len(data["different"])
+            if data_total:
+                data_score = len(data["matching"]) / data_total * 100
+                tier, label = _tier_from_score(data_score)
+                categories.append({"name": "Table Data", "score": data_score, "tier": tier, "label": label})
+        elif "tables" in data:
+            tables = [t for t in data["tables"] if not t.get("skipped")]
+            if tables:
+                identical = sum(1 for t in tables if t.get("identical"))
+                data_score = identical / len(tables) * 100
+                tier, label = _tier_from_score(data_score)
+                categories.append({"name": "Table Data", "score": data_score, "tier": tier, "label": label})
+
+    if not categories:
+        return {"score": 100, "tier": "green", "label": "Identical", "categories": []}
+
+    weights = {"Table Schemas": 35, "Edge Functions": 25, "Table Data": 40}
+    total_w = sum(weights.get(c["name"], 33) for c in categories)
+    overall = sum(c["score"] * weights.get(c["name"], 33) for c in categories) / total_w
+    tier, label = _tier_from_score(overall)
+    return {"score": round(overall, 1), "tier": tier, "label": label, "categories": categories}
+
+
+def _open_in_browser(path: Path):
+    uri = path.resolve().as_uri()
+    try:
+        webbrowser.open(uri)
+    except Exception as e:
+        print(f"  Could not open browser: {e}")
+        print(f"  Open manually: {path.resolve()}")
+
+
 def write_html_report(report: dict) -> str:
-    """Return a self-contained HTML document for the compare report."""
-    source_ref = html.escape(report["source_ref"])
-    target_ref = html.escape(report["target_ref"])
-    compared_at = html.escape(report.get("compared_at", ""))
+    """Return a self-contained, Apple-inspired HTML compare report."""
+    source_ref = report["source_ref"]
+    target_ref = report["target_ref"]
+    compared_at = report.get("compared_at", "")
+    sim = _compute_similarity(report)
+    esc = lambda v: html.escape(str(v)) if v is not None else "—"
+    tier = sim["tier"]
+    score = sim["score"]
 
-    def esc(val):
-        return html.escape(str(val)) if val is not None else "<em>—</em>"
+    def pill(label, t):
+        return f'<span class="pill pill-{t}">{esc(label)}</span>'
 
-    def badge(text, css_class):
-        return f'<span class="badge {css_class}">{html.escape(text)}</span>'
+    def meter(score_val, t):
+        return (
+            f'<div class="meter meter-{t}"><div class="meter-fill" style="width:{min(score_val, 100):.0f}%"></div></div>'
+            f'<span class="meter-pct">{score_val:.0f}%</span>'
+        )
 
     parts = [f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Compare {source_ref} vs {target_ref}</title>
+<title>{esc(sim['label'])} — {esc(source_ref)} vs {esc(target_ref)}</title>
 <style>
   :root {{
-    --source: #2563eb; --source-bg: #eff6ff;
-    --target: #059669; --target-bg: #ecfdf5;
-    --warn: #d97706; --bad: #dc2626; --ok: #16a34a;
-    --bg: #f8fafc; --card: #fff; --border: #e2e8f0; --text: #0f172a; --muted: #64748b;
+    --bg: #f5f5f7; --surface: #ffffff; --surface2: #fbfbfd;
+    --text: #1d1d1f; --muted: #86868b; --hairline: rgba(0,0,0,.08);
+    --green: #34c759; --green-bg: #e8f8ec; --green-text: #1a7f37;
+    --lime: #a8e063; --lime-bg: #f4fce8; --lime-text: #4d7c0f;
+    --yellow: #ffcc00; --yellow-bg: #fff9e6; --yellow-text: #9a6700;
+    --amber: #ff9500; --amber-bg: #fff4e5; --amber-text: #c93400;
+    --red: #ff3b30; --red-bg: #ffebea; --red-text: #d70015;
+    --source: #0071e3; --source-bg: #e8f1fb;
+    --target: #5856d6; --target-bg: #ededfc;
+    --radius: 18px; --shadow: 0 2px 16px rgba(0,0,0,.06);
   }}
-  * {{ box-sizing: border-box; }}
-  body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 0; background: var(--bg); color: var(--text); line-height: 1.5; }}
-  .wrap {{ max-width: 1200px; margin: 0 auto; padding: 24px; }}
-  h1 {{ font-size: 1.5rem; margin: 0 0 8px; }}
-  h2 {{ font-size: 1.15rem; margin: 28px 0 12px; border-bottom: 2px solid var(--border); padding-bottom: 6px; }}
-  h3 {{ font-size: 1rem; margin: 16px 0 8px; }}
-  .meta {{ color: var(--muted); font-size: 0.9rem; margin-bottom: 20px; }}
-  .legend {{ display: flex; gap: 16px; flex-wrap: wrap; margin: 16px 0 24px; }}
-  .legend .badge {{ font-size: 0.85rem; }}
-  .badge {{ display: inline-block; padding: 4px 10px; border-radius: 6px; font-weight: 600; font-size: 0.8rem; }}
-  .badge-source {{ background: var(--source-bg); color: var(--source); border: 1px solid #bfdbfe; }}
-  .badge-target {{ background: var(--target-bg); color: var(--target); border: 1px solid #a7f3d0; }}
-  .cards {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 12px 0; }}
-  .card {{ background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }}
-  .card .n {{ font-size: 1.4rem; font-weight: 700; }}
-  .card .l {{ font-size: 0.8rem; color: var(--muted); }}
-  table {{ width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin: 12px 0; font-size: 0.9rem; }}
-  th, td {{ padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }}
-  th {{ background: #f1f5f9; font-weight: 600; }}
-  th.col-source {{ color: var(--source); }}
-  th.col-target {{ color: var(--target); }}
-  tr:last-child td {{ border-bottom: none; }}
-  .diff {{ background: #fff7ed; }}
-  .ok {{ color: var(--ok); }}
-  .bad {{ color: var(--bad); }}
-  .mono {{ font-family: ui-monospace, Consolas, monospace; font-size: 0.85rem; }}
-  .schema-box {{ background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin: 10px 0; }}
-  .schema-box h3 {{ margin-top: 0; }}
-  ul {{ margin: 6px 0; padding-left: 20px; }}
-  .empty {{ color: var(--muted); font-style: italic; }}
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.47;
+    -webkit-font-smoothing: antialiased;
+  }}
+  .page {{ max-width: 1080px; margin: 0 auto; padding: 32px 24px 64px; }}
+  .hero {{
+    background: var(--surface); border-radius: 24px; box-shadow: var(--shadow);
+    padding: 40px 36px; margin-bottom: 28px; text-align: center;
+  }}
+  .hero-eyebrow {{ font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }}
+  .hero h1 {{ font-size: 34px; font-weight: 700; letter-spacing: -.02em; margin-bottom: 6px; }}
+  .hero-sub {{ color: var(--muted); font-size: 15px; margin-bottom: 28px; }}
+  .score-ring {{
+    width: 160px; height: 160px; border-radius: 50%; margin: 0 auto 16px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    border: 6px solid; font-weight: 700;
+  }}
+  .score-ring-green {{ border-color: var(--green); background: var(--green-bg); color: var(--green-text); }}
+  .score-ring-lime {{ border-color: var(--lime); background: var(--lime-bg); color: var(--lime-text); }}
+  .score-ring-yellow {{ border-color: var(--yellow); background: var(--yellow-bg); color: var(--yellow-text); }}
+  .score-ring-amber {{ border-color: var(--amber); background: var(--amber-bg); color: var(--amber-text); }}
+  .score-ring-red {{ border-color: var(--red); background: var(--red-bg); color: var(--red-text); }}
+  .score-num {{ font-size: 42px; line-height: 1; letter-spacing: -.03em; }}
+  .score-label {{ font-size: 15px; font-weight: 600; margin-top: 4px; }}
+  .verdict {{ font-size: 22px; font-weight: 600; margin-bottom: 20px; }}
+  .projects {{ display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }}
+  .proj {{
+    padding: 10px 18px; border-radius: 980px; font-size: 13px; font-weight: 600;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }}
+  .proj-source {{ background: var(--source-bg); color: var(--source); }}
+  .proj-target {{ background: var(--target-bg); color: var(--target); }}
+  .proj span {{ font-weight: 400; opacity: .7; margin-right: 6px; font-family: inherit; }}
+  .cat-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 28px; }}
+  .cat-card {{
+    background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 20px 22px;
+  }}
+  .cat-card h3 {{ font-size: 13px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 10px; }}
+  .cat-row {{ display: flex; align-items: center; gap: 10px; }}
+  .meter {{ flex: 1; height: 8px; background: #e8e8ed; border-radius: 99px; overflow: hidden; }}
+  .meter-fill {{ height: 100%; border-radius: 99px; transition: width .4s; }}
+  .meter-green .meter-fill {{ background: var(--green); }}
+  .meter-lime .meter-fill {{ background: var(--lime); }}
+  .meter-yellow .meter-fill {{ background: var(--yellow); }}
+  .meter-amber .meter-fill {{ background: var(--amber); }}
+  .meter-red .meter-fill {{ background: var(--red); }}
+  .meter-pct {{ font-size: 15px; font-weight: 600; min-width: 38px; text-align: right; }}
+  .section {{
+    background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 28px 28px 24px; margin-bottom: 20px;
+  }}
+  .section-head {{ display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }}
+  .section h2 {{ font-size: 22px; font-weight: 700; letter-spacing: -.02em; }}
+  .stats {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 20px; }}
+  .stat {{
+    background: var(--surface2); border-radius: 14px; padding: 14px 16px; text-align: center;
+    border: 1px solid var(--hairline);
+  }}
+  .stat .n {{ font-size: 28px; font-weight: 700; letter-spacing: -.02em; }}
+  .stat .l {{ font-size: 12px; color: var(--muted); margin-top: 2px; }}
+  .stat-green .n {{ color: var(--green-text); }}
+  .stat-yellow .n {{ color: var(--yellow-text); }}
+  .stat-red .n {{ color: var(--red-text); }}
+  .pill {{
+    display: inline-block; padding: 4px 12px; border-radius: 980px;
+    font-size: 12px; font-weight: 600; white-space: nowrap;
+  }}
+  .pill-green {{ background: var(--green-bg); color: var(--green-text); }}
+  .pill-lime {{ background: var(--lime-bg); color: var(--lime-text); }}
+  .pill-yellow {{ background: var(--yellow-bg); color: var(--yellow-text); }}
+  .pill-amber {{ background: var(--amber-bg); color: var(--amber-text); }}
+  .pill-red {{ background: var(--red-bg); color: var(--red-text); }}
+  table {{ width: 100%; border-collapse: separate; border-spacing: 0; font-size: 14px; }}
+  thead th {{
+    text-align: left; padding: 12px 14px; font-size: 12px; font-weight: 600;
+    color: var(--muted); text-transform: uppercase; letter-spacing: .04em;
+    border-bottom: 1px solid var(--hairline); background: var(--surface2);
+  }}
+  thead th:first-child {{ border-radius: 12px 0 0 0; }}
+  thead th:last-child {{ border-radius: 0 12px 0 0; }}
+  tbody td {{ padding: 13px 14px; border-bottom: 1px solid var(--hairline); vertical-align: top; }}
+  tbody tr:last-child td {{ border-bottom: none; }}
+  tbody tr:hover {{ background: var(--surface2); }}
+  .row-green {{ background: var(--green-bg); }}
+  .row-yellow {{ background: var(--yellow-bg); }}
+  .row-red {{ background: var(--red-bg); }}
+  th.th-source {{ color: var(--source); }}
+  th.th-target {{ color: var(--target); }}
+  .mono {{ font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13px; }}
+  .detail-card {{
+    background: var(--surface2); border-radius: 14px; padding: 18px 20px;
+    margin-top: 14px; border: 1px solid var(--hairline);
+  }}
+  .detail-card h4 {{ font-size: 15px; font-weight: 600; margin-bottom: 12px; }}
+  .col-list {{ list-style: none; margin: 8px 0; }}
+  .col-list li {{ padding: 6px 0; font-size: 14px; }}
+  .col-list li::before {{ content: "● "; }}
+  .col-list-src li::before {{ color: var(--source); }}
+  .col-list-tgt li::before {{ color: var(--target); }}
+  .footer {{ text-align: center; color: var(--muted); font-size: 12px; margin-top: 32px; }}
+  .legend-bar {{
+    display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;
+    margin: 20px 0 0; font-size: 12px; color: var(--muted);
+  }}
+  .legend-item {{ display: flex; align-items: center; gap: 6px; }}
+  .dot {{ width: 10px; height: 10px; border-radius: 50%; }}
+  .dot-green {{ background: var(--green); }}
+  .dot-yellow {{ background: var(--yellow); }}
+  .dot-red {{ background: var(--red); }}
 </style>
 </head>
 <body>
-<div class="wrap">
-<h1>Supabase Database Compare</h1>
-<p class="meta">Compared at {compared_at}</p>
-<div class="legend">
-  {badge("SOURCE: " + source_ref, "badge-source")}
-  {badge("TARGET: " + target_ref, "badge-target")}
-</div>
+<div class="page">
+  <div class="hero">
+    <div class="hero-eyebrow">Supabase Database Compare</div>
+    <h1>Similarity Report</h1>
+    <p class="hero-sub">{esc(compared_at)}</p>
+    <div class="score-ring score-ring-{tier}">
+      <div class="score-num">{score:.0f}</div>
+      <div class="score-label">/ 100</div>
+    </div>
+    <div class="verdict">{pill(sim['label'], tier)}</div>
+    <div class="projects">
+      <div class="proj proj-source"><span>Source</span>{esc(source_ref)}</div>
+      <div class="proj proj-target"><span>Target</span>{esc(target_ref)}</div>
+    </div>
+    <div class="legend-bar">
+      <div class="legend-item"><span class="dot dot-green"></span> Identical / Similar</div>
+      <div class="legend-item"><span class="dot dot-yellow"></span> Partially Similar</div>
+      <div class="legend-item"><span class="dot dot-red"></span> Different / Not Similar</div>
+    </div>
+  </div>
+  <div class="cat-grid">
 """]
 
+    for cat in sim["categories"]:
+        parts.append(f"""    <div class="cat-card">
+      <h3>{esc(cat['name'])}</h3>
+      <div class="cat-row">{meter(cat['score'], cat['tier'])}{pill(cat['label'], cat['tier'])}</div>
+    </div>""")
+
+    parts.append("  </div>")
+
+    # --- Tables ---
     ts = report["tables"]
-    parts.append("<h2>Tables (schema)</h2>")
-    parts.append('<div class="cards">')
-    for label, key in [
-        (f"Only in SOURCE", "only_in_source"),
-        (f"Only in TARGET", "only_in_target"),
-        ("Identical", "identical"),
-        ("Different", "different"),
-    ]:
-        count = len(ts[key]) if key != "different" else len(ts["different"])
-        parts.append(f'<div class="card"><div class="n">{count}</div><div class="l">{html.escape(label)}</div></div>')
-    parts.append("</div>")
+    schema_tier, schema_lbl = _tier_from_score(
+        _category_score(len(ts["identical"]), len(ts["different"]),
+                        len(ts["only_in_source"]) + len(ts["only_in_target"])) if (
+            len(ts["identical"]) + len(ts["different"]) + len(ts["only_in_source"]) + len(ts["only_in_target"])
+        ) else 100
+    )
+    parts.append(f"""  <div class="section">
+    <div class="section-head"><h2>Table Schemas</h2>{pill(schema_lbl, schema_tier)}</div>
+    <div class="stats">
+      <div class="stat stat-green"><div class="n">{len(ts['identical'])}</div><div class="l">Identical</div></div>
+      <div class="stat stat-yellow"><div class="n">{len(ts['different'])}</div><div class="l">Different</div></div>
+      <div class="stat stat-red"><div class="n">{len(ts['only_in_source'])}</div><div class="l">Only Source</div></div>
+      <div class="stat stat-red"><div class="n">{len(ts['only_in_target'])}</div><div class="l">Only Target</div></div>
+    </div>""")
 
-    if ts["only_in_source"]:
-        parts.append(f"<h3>Only in SOURCE ({source_ref})</h3><ul>")
+    if ts["only_in_source"] or ts["only_in_target"]:
+        parts.append("<table><thead><tr><th>Status</th><th>Table</th></tr></thead><tbody>")
         for t in ts["only_in_source"]:
-            parts.append(f"<li class='mono'>{esc(t)}</li>")
-        parts.append("</ul>")
-    if ts["only_in_target"]:
-        parts.append(f"<h3>Only in TARGET ({target_ref})</h3><ul>")
+            parts.append(f'<tr class="row-red"><td>{pill("Only in Source", "red")}</td><td class="mono">{esc(t)}</td></tr>')
         for t in ts["only_in_target"]:
-            parts.append(f"<li class='mono'>{esc(t)}</li>")
-        parts.append("</ul>")
+            parts.append(f'<tr class="row-red"><td>{pill("Only in Target", "red")}</td><td class="mono">{esc(t)}</td></tr>')
+        parts.append("</tbody></table>")
 
-    if ts["different"]:
-        parts.append("<h3>Schema differences (column-level)</h3>")
-        for entry in ts["different"]:
-            table = esc(entry["table"])
-            cd = entry["column_diff"]
-            parts.append(f'<div class="schema-box"><h3 class="mono">{table}</h3>')
-            if cd.get("only_in_source"):
-                parts.append(f"<p><strong>Columns only in SOURCE ({source_ref}):</strong></p><ul>")
-                for col in cd["only_in_source"]:
-                    parts.append(f"<li class='mono'>+ {esc(col)}</li>")
-                parts.append("</ul>")
-            if cd.get("only_in_target"):
-                parts.append(f"<p><strong>Columns only in TARGET ({target_ref}):</strong></p><ul>")
-                for col in cd["only_in_target"]:
-                    parts.append(f"<li class='mono'>+ {esc(col)}</li>")
-                parts.append("</ul>")
-            if cd.get("different"):
-                parts.append("<table><tr><th>Column</th><th class='col-source'>SOURCE</th><th class='col-target'>TARGET</th></tr>")
-                for diff in cd["different"]:
-                    parts.append(
-                        f"<tr class='diff'><td class='mono'>{esc(diff['column'])}</td>"
-                        f"<td class='mono'>{esc(_format_column_spec(diff['source']))}</td>"
-                        f"<td class='mono'>{esc(_format_column_spec(diff['target']))}</td></tr>"
-                    )
-                parts.append("</table>")
-            parts.append("</div>")
+    for entry in ts["different"]:
+        cd = entry["column_diff"]
+        parts.append(f'<div class="detail-card"><h4 class="mono">{esc(entry["table"])}</h4>')
+        parts.append(f'<div style="margin-bottom:10px">{pill("Schema Differs", "yellow")}</div>')
+        if cd.get("only_in_source"):
+            parts.append(f'<p style="font-size:13px;color:var(--muted);margin-bottom:6px">Columns only in <strong>Source</strong></p><ul class="col-list col-list-src">')
+            for col in cd["only_in_source"]:
+                parts.append(f"<li class='mono'>{esc(col)}</li>")
+            parts.append("</ul>")
+        if cd.get("only_in_target"):
+            parts.append(f'<p style="font-size:13px;color:var(--muted);margin:10px 0 6px">Columns only in <strong>Target</strong></p><ul class="col-list col-list-tgt">')
+            for col in cd["only_in_target"]:
+                parts.append(f"<li class='mono'>{esc(col)}</li>")
+            parts.append("</ul>")
+        if cd.get("different"):
+            parts.append("<table><thead><tr><th>Column</th><th class='th-source'>Source</th><th class='th-target'>Target</th></tr></thead><tbody>")
+            for diff in cd["different"]:
+                parts.append(
+                    f'<tr class="row-yellow"><td class="mono">{esc(diff["column"])}</td>'
+                    f'<td class="mono">{esc(_format_column_spec(diff["source"]))}</td>'
+                    f'<td class="mono">{esc(_format_column_spec(diff["target"]))}</td></tr>'
+                )
+            parts.append("</tbody></table>")
+        parts.append("</div>")
 
+    if ts["identical"]:
+        parts.append(f'<p style="margin-top:16px;font-size:14px;color:var(--muted)">{len(ts["identical"])} table(s) with identical schema: <span class="mono">{esc(", ".join(ts["identical"]))}</span></p>')
+
+    parts.append("  </div>")
+
+    # --- Edge Functions ---
     if report.get("edge_functions") is not None:
         ef = report["edge_functions"]
-        parts.append("<h2>Edge Functions</h2>")
-        parts.append('<div class="cards">')
-        for label, key in [
-            ("Only in SOURCE", "only_in_source"),
-            ("Only in TARGET", "only_in_target"),
-            ("Identical", "identical"),
-            ("Different", "different"),
-        ]:
-            count = len(ef[key])
-            parts.append(f'<div class="card"><div class="n">{count}</div><div class="l">{label}</div></div>')
-        parts.append("</div>")
-        if ef["different"]:
-            parts.append("<table><tr><th>Slug</th><th>Diff</th><th class='col-source'>SOURCE meta</th><th class='col-target'>TARGET meta</th></tr>")
-            for d in ef["different"]:
-                parts.append(
-                    f"<tr class='diff'><td class='mono'>{esc(d['slug'])}</td>"
-                    f"<td>{esc(', '.join(d['reasons']))}</td>"
-                    f"<td class='mono'>{esc(json.dumps(d['source_meta'], default=str))}</td>"
-                    f"<td class='mono'>{esc(json.dumps(d['target_meta'], default=str))}</td></tr>"
-                )
-            parts.append("</table>")
+        ef_total = len(ef["identical"]) + len(ef["different"]) + len(ef["only_in_source"]) + len(ef["only_in_target"])
+        ef_score = _category_score(len(ef["identical"]), len(ef["different"]),
+                                   len(ef["only_in_source"]) + len(ef["only_in_target"])) if ef_total else 100
+        ef_tier, ef_lbl = _tier_from_score(ef_score)
+        parts.append(f"""  <div class="section">
+    <div class="section-head"><h2>Edge Functions</h2>{pill(ef_lbl, ef_tier)}</div>
+    <div class="stats">
+      <div class="stat stat-green"><div class="n">{len(ef['identical'])}</div><div class="l">Identical</div></div>
+      <div class="stat stat-yellow"><div class="n">{len(ef['different'])}</div><div class="l">Different</div></div>
+      <div class="stat stat-red"><div class="n">{len(ef['only_in_source'])}</div><div class="l">Only Source</div></div>
+      <div class="stat stat-red"><div class="n">{len(ef['only_in_target'])}</div><div class="l">Only Target</div></div>
+    </div><table><thead><tr><th>Status</th><th>Function</th><th>Details</th></tr></thead><tbody>""")
+        for slug in ef["only_in_source"]:
+            parts.append(f'<tr class="row-red"><td>{pill("Only Source", "red")}</td><td class="mono">{esc(slug)}</td><td>—</td></tr>')
+        for slug in ef["only_in_target"]:
+            parts.append(f'<tr class="row-red"><td>{pill("Only Target", "red")}</td><td class="mono">{esc(slug)}</td><td>—</td></tr>')
+        for slug in ef["identical"]:
+            parts.append(f'<tr class="row-green"><td>{pill("Identical", "green")}</td><td class="mono">{esc(slug)}</td><td>Metadata &amp; source match</td></tr>')
+        for d in ef["different"]:
+            parts.append(
+                f'<tr class="row-yellow"><td>{pill("Different", "yellow")}</td>'
+                f'<td class="mono">{esc(d["slug"])}</td>'
+                f'<td>{esc(", ".join(d["reasons"]))}</td></tr>'
+            )
+        parts.append("</tbody></table></div>")
 
+    # --- Data ---
     if report.get("data") is not None:
         data = report["data"]
-        parts.append("<h2>Table data</h2>")
+        parts.append('  <div class="section"><div class="section-head"><h2>Table Data</h2>')
         if "matching" in data:
-            parts.append(
-                f'<p>Matching: <span class="ok">{len(data["matching"])}</span> · '
-                f'Different: <span class="bad">{len(data["different"])}</span></p>'
-            )
-            if data["different"]:
+            dt = len(data["matching"]) + len(data["different"])
+            ds = len(data["matching"]) / dt * 100 if dt else 100
+            dt_tier, dt_lbl = _tier_from_score(ds)
+            parts.append(f'{pill(dt_lbl, dt_tier)}</div>')
+            parts.append(f'<div class="stats"><div class="stat stat-green"><div class="n">{len(data["matching"])}</div><div class="l">Matching</div></div>')
+            parts.append(f'<div class="stat stat-red"><div class="n">{len(data["different"])}</div><div class="l">Different</div></div></div>')
+            parts.append("<table><thead><tr><th>Status</th><th>Table</th><th class='th-source'>Source Rows</th><th class='th-target'>Target Rows</th><th>Checksum</th></tr></thead><tbody>")
+            for key in data["matching"]:
+                parts.append(f'<tr class="row-green"><td>{pill("Match", "green")}</td><td class="mono">{esc(key)}</td><td colspan="3">Row count &amp; checksum identical</td></tr>')
+            for d in data["different"]:
+                row_t = "yellow" if d["row_count_match"] else "red"
+                chk_t = "green" if d["checksum_match"] else "red"
+                chk_l = "Match" if d["checksum_match"] else "Mismatch"
                 parts.append(
-                    "<table><tr><th>Table</th>"
-                    f"<th class='col-source'>SOURCE rows</th>"
-                    f"<th class='col-target'>TARGET rows</th>"
-                    "<th>Checksum</th></tr>"
+                    f'<tr class="row-{row_t}"><td>{pill("Different", row_t)}</td>'
+                    f'<td class="mono">{esc(d["table"])}</td>'
+                    f'<td>{d["source_row_count"]}</td><td>{d["target_row_count"]}</td>'
+                    f'<td>{pill(chk_l, chk_t)}</td></tr>'
                 )
-                for d in data["different"]:
-                    chk = "match" if d["checksum_match"] else "mismatch"
-                    cls = "ok" if d["checksum_match"] else "bad"
-                    parts.append(
-                        f"<tr class='diff'><td class='mono'>{esc(d['table'])}</td>"
-                        f"<td>{d['source_row_count']}</td><td>{d['target_row_count']}</td>"
-                        f"<td class='{cls}'>{chk}</td></tr>"
-                    )
-                parts.append("</table>")
+            parts.append("</tbody></table>")
         elif "tables" in data:
-            parts.append("<table><tr><th>Table</th><th>Status</th><th>Details</th></tr>")
+            tables = [t for t in data["tables"] if not t.get("skipped")]
+            identical = sum(1 for t in tables if t.get("identical"))
+            ds = identical / len(tables) * 100 if tables else 100
+            dt_tier, dt_lbl = _tier_from_score(ds)
+            parts.append(f'{pill(dt_lbl, dt_tier)}</div><table><thead><tr><th>Status</th><th>Table</th><th>Details</th></tr></thead><tbody>')
             for t in data["tables"]:
                 if t.get("skipped"):
-                    parts.append(f"<tr><td class='mono'>{esc(t['table'])}</td><td colspan='2'>{esc(t['reason'])}</td></tr>")
+                    parts.append(f'<tr><td>{pill("Skipped", "amber")}</td><td class="mono">{esc(t["table"])}</td><td>{esc(t["reason"])}</td></tr>')
+                elif t["identical"]:
+                    parts.append(f'<tr class="row-green"><td>{pill("Identical", "green")}</td><td class="mono">{esc(t["table"])}</td><td>Deep compare: all rows match</td></tr>')
                 else:
-                    status = "identical" if t["identical"] else "different"
-                    detail = (
-                        f"SOURCE={t['source_row_count']} TARGET={t['target_row_count']} · "
-                        f"{len(t['only_in_source'])} only source, {len(t['only_in_target'])} only target, "
-                        f"{len(t['changed'])} changed"
+                    parts.append(
+                        f'<tr class="row-red"><td>{pill("Different", "red")}</td>'
+                        f'<td class="mono">{esc(t["table"])}</td>'
+                        f'<td>{len(t["only_in_source"])} only source · {len(t["only_in_target"])} only target · {len(t["changed"])} changed</td></tr>'
                     )
-                    parts.append(f"<tr><td class='mono'>{esc(t['table'])}</td><td>{status}</td><td>{detail}</td></tr>")
-            parts.append("</table>")
+            parts.append("</tbody></table>")
+        parts.append("  </div>")
 
+    # --- Last write ---
     if report.get("last_write"):
         lw = report["last_write"]
-        parts.append("<h2>Last write estimates</h2>")
-        parts.append(
-            "<table><tr><th>Table</th>"
-            f"<th class='col-source'>SOURCE ({source_ref})</th>"
-            f"<th class='col-target'>TARGET ({target_ref})</th>"
-            "<th>Method</th></tr>"
-        )
+        parts.append(f"""  <div class="section">
+    <div class="section-head"><h2>Last Write Estimates</h2></div>
+    <table><thead><tr><th>Table</th><th class="th-source">Source</th><th class="th-target">Target</th><th>Status</th></tr></thead><tbody>""")
         for key in sorted(lw["source"].keys()):
             s, t = lw["source"][key], lw["target"][key]
+            sv, tv = _format_last_write_value(s), _format_last_write_value(t)
+            if sv == tv and sv != "unavailable":
+                row_cls, status, st = "row-green", "Same", "green"
+            elif sv == "unavailable" or tv == "unavailable":
+                row_cls, status, st = "row-yellow", "Unknown", "yellow"
+            else:
+                row_cls, status, st = "row-yellow", "Differs", "yellow"
             parts.append(
-                f"<tr><td class='mono'>{esc(key)}</td>"
-                f"<td>{esc(_format_last_write_value(s))}</td>"
-                f"<td>{esc(_format_last_write_value(t))}</td>"
-                f"<td class='mono'>S:{esc(s.get('method','?'))} / T:{esc(t.get('method','?'))}</td></tr>"
+                f'<tr class="{row_cls}"><td class="mono">{esc(key)}</td>'
+                f'<td>{esc(sv)}</td><td>{esc(tv)}</td>'
+                f'<td>{pill(status, st)}</td></tr>'
             )
-        parts.append("</table>")
+        parts.append("</tbody></table></div>")
 
-    parts.append("</div></body></html>")
+    parts.append(f"""
+  <div class="footer">Read-only compare · No changes were made to either project</div>
+</div>
+</body>
+</html>""")
     return "".join(parts)
 
 
@@ -1093,6 +1321,7 @@ def do_compare(
     output_path: str,
     fmt: str,
     quiet: bool = False,
+    open_browser: bool = True,
 ):
     progress = Progress(enabled=not quiet)
 
@@ -1157,6 +1386,7 @@ def do_compare(
         "last_write": last_write,
     }
 
+    saved_html_path = None
     if output_path:
         out = Path(output_path)
         if not out.is_absolute():
@@ -1164,6 +1394,7 @@ def do_compare(
         out.parent.mkdir(parents=True, exist_ok=True)
         if fmt == "html" or str(out).lower().endswith(".html"):
             out.write_text(write_html_report(report), encoding="utf-8")
+            saved_html_path = out
         else:
             out.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
         print(f"\n  Report saved: {out.resolve()}")
@@ -1171,10 +1402,13 @@ def do_compare(
     if fmt == "json":
         print(json.dumps(report, indent=2, default=str))
     elif fmt == "html":
-        if not output_path:
-            print(write_html_report(report))
-        else:
-            print(f"\n  Open the HTML report in your browser for side-by-side formatting.")
+        sim = _compute_similarity(report)
+        print(f"\n  Overall similarity: {sim['score']:.0f}/100 — {sim['label']}")
+        if saved_html_path and open_browser:
+            print("  Opening report in browser...")
+            _open_in_browser(saved_html_path)
+        elif saved_html_path:
+            print(f"  Open in browser: {saved_html_path.resolve().as_uri()}")
     else:
         print_text_report(report)
 
@@ -1198,9 +1432,9 @@ Examples:
 
   python %(prog)s compare --source-ref sourceref --target-ref targetref --tables users orders --deep
 
-  python %(prog)s compare --source-ref sourceref --target-ref targetref --skip-data --format json
+  python %(prog)s compare --source-ref sourceref --target-ref targetref --format text
 
-  python %(prog)s compare --source-ref sourceref --target-ref targetref --format html
+  python %(prog)s compare --source-ref sourceref --target-ref targetref --format json --no-open
 
 This tool is read-only. It never modifies, deletes, or deploys anything on your projects.
 
@@ -1278,13 +1512,18 @@ Environment variables:
     cp.add_argument(
         "--format",
         choices=["text", "json", "html"],
-        default="text",
-        help="Output format: text summary, json, or html report (default: text).",
+        default="html",
+        help="Output format: html report (default), text summary, or json.",
     )
     cp.add_argument(
         "--quiet",
         action="store_true",
         help="Suppress progress bar (print step labels only when not a TTY).",
+    )
+    cp.add_argument(
+        "--no-open",
+        action="store_true",
+        help="Do not open the HTML report in the browser when complete.",
     )
 
     return parser
@@ -1319,7 +1558,7 @@ def main():
             print("  Or set SUPABASE_SOURCE_PROJECT_REF and SUPABASE_TARGET_PROJECT_REF.")
             sys.exit(1)
         output = args.output
-        if output is None and args.format in ("text", "html"):
+        if output is None and args.format in ("text", "html", "json"):
             ext = ".html" if args.format == "html" else ".json"
             output = _default_output_path(args.source_ref, args.target_ref, ext)
         do_compare(
@@ -1335,6 +1574,7 @@ def main():
             output,
             args.format,
             args.quiet,
+            open_browser=not args.no_open,
         )
 
 
