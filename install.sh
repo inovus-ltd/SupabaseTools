@@ -21,6 +21,7 @@ TOOLS=(
     "supabase-storage-copy"
     "supabase-auth-copy"
     "supabase-secrets-manager"
+    "supabase-database-compare"
 )
 
 # -- Colour helpers -----------------------------------------------------------
@@ -113,4 +114,5 @@ echo "   supabase-functions-backup list --project-ref <ref> --token <token>"
 echo "   supabase-storage-copy list --project-ref <ref> --token <token> --service-key <key>"
 echo "   supabase-auth-copy list --project-ref <ref> --token <token>"
 echo "   supabase-secrets-manager list --project-ref <ref> --token <token>"
+echo "   supabase-database-compare compare --source-ref <source> --target-ref <target> --token <token>"
 echo ""

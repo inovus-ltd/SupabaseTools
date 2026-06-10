@@ -48,6 +48,7 @@ jobs:
             "supabase-storage-copy/supabase-storage-copy.py:supabase-storage-copy"
             "supabase-auth-copy/supabase-auth-copy.py:supabase-auth-copy"
             "supabase-secrets-manager/supabase-secrets-manager.py:supabase-secrets-manager"
+            "supabase-database-compare/supabase-database-compare.py:supabase-database-compare"
           )
 
           for entry in "${tools[@]}"; do
@@ -119,6 +120,7 @@ jobs:
             | supabase-storage-copy | [⬇ .exe](../../releases/download/${{ github.ref_name }}/supabase-storage-copy-windows.exe) | [⬇ binary](../../releases/download/${{ github.ref_name }}/supabase-storage-copy-macos) | [⬇ binary](../../releases/download/${{ github.ref_name }}/supabase-storage-copy-linux) |
             | supabase-auth-copy | [⬇ .exe](../../releases/download/${{ github.ref_name }}/supabase-auth-copy-windows.exe) | [⬇ binary](../../releases/download/${{ github.ref_name }}/supabase-auth-copy-macos) | [⬇ binary](../../releases/download/${{ github.ref_name }}/supabase-auth-copy-linux) |
             | supabase-secrets-manager | [⬇ .exe](../../releases/download/${{ github.ref_name }}/supabase-secrets-manager-windows.exe) | [⬇ binary](../../releases/download/${{ github.ref_name }}/supabase-secrets-manager-macos) | [⬇ binary](../../releases/download/${{ github.ref_name }}/supabase-secrets-manager-linux) |
+            | supabase-database-compare | [⬇ .exe](../../releases/download/${{ github.ref_name }}/supabase-database-compare-windows.exe) | [⬇ binary](../../releases/download/${{ github.ref_name }}/supabase-database-compare-macos) | [⬇ binary](../../releases/download/${{ github.ref_name }}/supabase-database-compare-linux) |
 
             ### Usage (Windows example)
             ```cmd
@@ -126,6 +128,7 @@ jobs:
             supabase-storage-copy-windows.exe backup --project-ref abcdefghijklmnop --token sbp_xxxx --service-key eyJ...
             supabase-auth-copy-windows.exe restore --project-ref newref --token sbp_xxxx --dir auth_backup_abcdefghijklmnop
             supabase-secrets-manager-windows.exe list --project-ref abcdefghijklmnop --token sbp_xxxx
+            supabase-database-compare-windows.exe compare --source-ref sourceref --target-ref targetref --token sbp_xxxx
             ```
 
             > **Note:** On macOS/Linux, make the binary executable first: `chmod +x supabase-functions-backup-macos`

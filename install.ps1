@@ -20,7 +20,8 @@ $tools = @(
     "supabase-functions-backup",
     "supabase-storage-copy",
     "supabase-auth-copy",
-    "supabase-secrets-manager"
+    "supabase-secrets-manager",
+    "supabase-database-compare"
 )
 
 Write-Host ""
@@ -120,4 +121,5 @@ Write-Host "   supabase-functions-backup list --project-ref <ref> --token <token
 Write-Host "   supabase-storage-copy list --project-ref <ref> --token <token> --service-key <key>"
 Write-Host "   supabase-auth-copy list --project-ref <ref> --token <token>"
 Write-Host "   supabase-secrets-manager list --project-ref <ref> --token <token>"
+Write-Host "   supabase-database-compare compare --source-ref <source> --target-ref <target> --token <token>"
 Write-Host ""
