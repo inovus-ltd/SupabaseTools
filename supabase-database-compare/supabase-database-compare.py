@@ -4,7 +4,8 @@ Supabase Database Compare Tool
 ==============================
 
 Compare two Supabase projects: table schemas, Edge Functions, table data,
-and estimated last-write times. Uses the Management API only (PAT required).
+and estimated last-write times. 100% non-destructive — read-only Management
+API only (PAT required). Never modifies source or target projects.
 
 Requirements:
   - Python 3.8+
@@ -790,7 +791,10 @@ def do_compare(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Compare two Supabase projects: tables, Edge Functions, data, and last-write estimates.",
+        description=(
+            "Compare two Supabase projects: tables, Edge Functions, data, and last-write estimates. "
+            "100% non-destructive (read-only)."
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -801,6 +805,8 @@ Examples:
   python %(prog)s compare --source-ref sourceref --target-ref targetref --tables users orders --deep
 
   python %(prog)s compare --source-ref sourceref --target-ref targetref --skip-data --format json
+
+This tool is read-only. It never modifies, deletes, or deploys anything on your projects.
 
 Environment variables:
   SUPABASE_ACCESS_TOKEN         Personal access token

@@ -1,6 +1,16 @@
 # Supabase Database Compare
 
-Compare two Supabase projects side by side: **table schemas**, **Edge Functions**, **table data**, and **estimated last-write times**. Read-only — uses the Management API with your Personal Access Token (no database password required).
+Compare two Supabase projects side by side: **table schemas**, **Edge Functions**, **table data**, and **estimated last-write times**.
+
+## 100% non-destructive
+
+This tool is **read-only**. It cannot modify, delete, or deploy anything.
+
+- All database inspection uses the Management API **`database/query/read-only`** endpoint — write SQL is not available to this tool
+- Edge Function inspection uses **GET** requests only (list metadata and download source for comparison)
+- Reports are saved **locally** on your machine; nothing is written back to Supabase
+
+You can run `compare` against production without risk of changing data, schema, or functions.
 
 ## Prerequisites
 
