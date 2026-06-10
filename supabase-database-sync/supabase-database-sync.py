@@ -526,39 +526,6 @@ def _print_plan_header(source_ref: str, target_ref: str, mode: str, dry_run: boo
     print()
 
 
-def do_plan(
-    api: SupabaseManagementAPI,
-    source_ref: str,
-    target_ref: str,
-    schemas: list,
-    tables_filter: list,
-    from_report: str,
-    mode: str,
-    batch_size: int,
-):
-    _print_plan_header(source_ref, target_ref, mode, dry_run=True)
-    table_keys, _, _ = resolve_table_list(api, source_ref, target_ref, schemas, tables_filter, from_report)
-    fk_edges = collect_fk_edges(api, source_ref, schemas)
-    ordered = sort_tables_by_fk(table_keys, fk_edges)
-
-    print(f"  Tables to sync ({len(ordered)}):\n")
-    valid = []
-    for key in ordered:
-        meta = validate_table_for_sync(api, source_ref, target_ref, key)
-        if meta["ok"]:
-            rows = fetch_all_rows(api, source_ref, meta["schema"], meta["table"], meta["primary_key"], batch_size)
-            print(f"    OK  {key} — {len(rows)} row(s) from source, PK: {', '.join(meta['primary_key'])}")
-            valid.append((key, len(rows)))
-        else:
-            print(f"    SKIP {key} — {meta['reason']}")
-
-    total_rows = sum(n for _, n in valid)
-    print(f"\n  Summary: {len(valid)} table(s), ~{total_rows} row(s) to upsert")
-    if mode == "mirror":
-        print("  Mirror mode will also remove target-only rows (per table)")
-    print("\n  Run sync to apply (requires confirmation).\n")
-
-
 def do_sync(
     api: SupabaseManagementAPI,
     source_ref: str,
@@ -636,15 +603,29 @@ def do_sync(
     progress.finish("Sync complete")
 
     print(f"\n  {'[DRY RUN] ' if dry_run else ''}Results:\n")
+    total_upserted = 0
+    total_deleted = 0
     for r in results:
         if r.get("skipped"):
             print(f"    SKIP {r['table']}: {r.get('reason', '?')}")
         else:
+            deleted = r.get("rows_deleted", 0)
+            total_upserted += r["rows_upserted"]
+            total_deleted += deleted
             print(
                 f"    {r['table']}: read {r['rows_read']}, "
-                f"upserted {r['rows_upserted']}, deleted {r.get('rows_deleted', 0)}"
+                f"upserted {r['rows_upserted']}, deleted {deleted}"
             )
-    print()
+            if r.get("delete_error"):
+                print(f"           delete error: {r['delete_error']}")
+    if dry_run:
+        print(
+            f"\n  Dry-run summary: {total_upserted} row(s) would be upserted"
+            + (f", {total_deleted} row(s) would be deleted (mirror)" if mode == "mirror" else "")
+        )
+        print("  No changes were made. Run sync without --dry-run to apply (requires confirmation).\n")
+    else:
+        print()
 
 
 # ---------------------------------------------------------------------------
@@ -658,8 +639,8 @@ def build_parser() -> argparse.ArgumentParser:
         epilog="""
 Examples:
   python %(prog)s plan --source-ref sourceref --target-ref targetref --token sbp_xxx
-  python %(prog)s sync --source-ref sourceref --target-ref targetref --token sbp_xxx
-  python %(prog)s sync --source-ref sourceref --target-ref targetref --mode mirror --tables users
+  python %(prog)s sync --source-ref sourceref --target-ref targetref --token sbp_xxx --dry-run
+  python %(prog)s sync --source-ref sourceref --target-ref targetref --mode mirror --dry-run
   python %(prog)s sync --from-report compare_sourceref_vs_targetref_20260101.json --dry-run
 
 Run supabase-database-compare first to check sync feasibility.
@@ -678,15 +659,19 @@ Environment variables:
     parent.add_argument("--target-ref", default=os.environ.get("SUPABASE_TARGET_PROJECT_REF"))
 
     for cmd in ("plan", "sync"):
-        p = subparsers.add_parser(cmd, parents=[parent], help=f"{cmd} table data sync.")
+        help_text = "Full dry-run preview (no writes)." if cmd == "plan" else "Execute table data sync."
+        p = subparsers.add_parser(cmd, parents=[parent], help=help_text)
         p.add_argument("--schemas", nargs="+", default=DEFAULT_SCHEMAS)
         p.add_argument("--tables", nargs="+", default=None)
         p.add_argument("--from-report", default=None, help="Compare JSON report to filter syncable tables.")
         p.add_argument("--mode", choices=["upsert", "mirror"], default="upsert")
         p.add_argument("--batch-size", type=int, default=200)
-        if cmd == "sync":
-            p.add_argument("--dry-run", action="store_true")
-            p.add_argument("--quiet", action="store_true")
+        p.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="Full preview: validate, simulate upserts and mirror deletes, no writes.",
+        )
+        p.add_argument("--quiet", action="store_true")
 
     return parser
 
@@ -706,12 +691,11 @@ def main():
 
     api = SupabaseManagementAPI(args.token)
 
-    if args.command == "plan":
-        do_plan(api, args.source_ref, args.target_ref, args.schemas, args.tables,
-                args.from_report, args.mode, args.batch_size)
-    elif args.command == "sync":
-        do_sync(api, args.source_ref, args.target_ref, args.schemas, args.tables,
-                args.from_report, args.mode, args.batch_size, args.dry_run, args.quiet)
+    dry_run = args.command == "plan" or args.dry_run
+    do_sync(
+        api, args.source_ref, args.target_ref, args.schemas, args.tables,
+        args.from_report, args.mode, args.batch_size, dry_run, args.quiet,
+    )
 
 
 if __name__ == "__main__":

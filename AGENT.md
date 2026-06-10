@@ -22,6 +22,12 @@ SupabaseTools/
   supabase-auth-copy/
     supabase-auth-copy.py           # Auth config + Third-Party Auth provider backup/restore
     README.md
+  supabase-database-compare/
+    supabase-database-compare.py    # Read-only compare two projects (schema, data, functions, sync prediction)
+    README.md
+  supabase-database-sync/
+    supabase-database-sync.py       # Sync table data source → target (upsert/mirror); MODIFIES TARGET
+    README.md
   README.md                         # Root overview
   AGENT.md                          # This file
   .gitignore
@@ -41,8 +47,12 @@ SupabaseTools/
 | Personal Access Token (PAT) | `--token` | `SUPABASE_ACCESS_TOKEN` | Account-level. Works across all projects. Used for Management API calls. | `https://supabase.com/dashboard/account/tokens` |
 | Service Role Key | `--service-key` | `SUPABASE_SERVICE_ROLE_KEY` | Project-level. Bypasses RLS. Required for Storage file operations. | `https://supabase.com/dashboard/project/<ref>/settings/api` |
 | Project Reference ID | `--project-ref` | `SUPABASE_PROJECT_REF` | Alphanumeric ID in the dashboard URL: `supabase.com/dashboard/project/<ref>` | Dashboard URL or Project Settings → General |
+| Source Project Ref | `--source-ref` | `SUPABASE_SOURCE_PROJECT_REF` | Source project in compare/sync workflows | Dashboard URL |
+| Target Project Ref | `--target-ref` | `SUPABASE_TARGET_PROJECT_REF` | Target project in compare/sync workflows | Dashboard URL |
 
 **Important:** When copying storage between projects, the `--service-key` must be the **target** project's service role key during restore, not the source project's.
+
+**Important:** `supabase-database-sync` **writes only to the target** project via `POST /database/query`. Source uses `database/query/read-only` only.
 
 ---
 
@@ -400,6 +410,94 @@ python supabase-auth-copy.py restore --project-ref <ref> --token <pat> [--dir <p
 
 ---
 
+## Tool 5: `supabase-database-compare`
+
+**Script:** `supabase-database-compare/supabase-database-compare.py`
+
+**100% read-only.** Compares two Supabase projects: table schemas, Edge Functions, table data (checksum or deep row diff), last-write estimates, and sync feasibility predictions. Uses Management API `database/query/read-only` and Edge Function GET endpoints only.
+
+### Commands
+
+#### `list` — Inventory tables and Edge Functions on one project
+
+```
+python supabase-database-compare.py list --project-ref <ref> --token <pat> [--schemas public ...]
+```
+
+#### `compare` — Compare source vs target
+
+```
+python supabase-database-compare.py compare --source-ref <src> --target-ref <tgt> --token <pat> [options]
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--schemas` | `public` | Schemas to include |
+| `--tables` | all shared | Limit data comparison |
+| `--skip-data` | false | Schema + Edge Functions only |
+| `--skip-edge-functions` | false | Skip function comparison |
+| `--deep` | false | Row-level diff by PK (up to `--max-rows`) |
+| `--max-rows` | 1000 | Max rows per table in deep mode |
+| `--format` | `html` | `html`, `text`, or `json` |
+| `--output` | auto | Output path |
+| `--no-open` | false | Don't open HTML in browser |
+| `--quiet` | false | Suppress progress bar |
+
+**Output paths (default):** `~/Documents/SupabaseTools/compare_<source>_vs_<target>_<timestamp>.html` (or `.json`).
+
+**JSON report keys used by sync tool:** `sync_assessment`, `primary_keys`, `tables`, `data`, `last_write`.
+
+**Sync assessment per table:** `syncable`, `confidence`, `icon` (green/lime/yellow/red), `reason`.
+
+**Overall verdicts:** Sync Recommended, Partial Sync Possible, Sync Not Recommended, Already In Sync.
+
+---
+
+## Tool 6: `supabase-database-sync`
+
+**Script:** `supabase-database-sync/supabase-database-sync.py`
+
+Syncs **table data** from source to target. **MODIFIES TARGET ONLY.** Requires identical schemas and primary keys on every synced table.
+
+### Commands
+
+#### `plan` — Full dry-run preview (no writes)
+
+```
+python supabase-database-sync.py plan --source-ref <src> --target-ref <tgt> --token <pat> [options]
+```
+
+Always runs the same code path as `sync --dry-run`.
+
+#### `sync` — Execute sync
+
+```
+python supabase-database-sync.py sync --source-ref <src> --target-ref <tgt> --token <pat> [options]
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--schemas` | `public` | Schemas to include |
+| `--tables` | all shared syncable | Filter tables (`name` or `schema.name`) |
+| `--from-report` | — | Compare JSON path; skip `syncable: false` tables |
+| `--mode` | `upsert` | `upsert` or `mirror` |
+| `--batch-size` | 200 | Rows per INSERT batch |
+| `--dry-run` | false | Full dry-run: validate, count upserts/deletes, no writes (`plan` always dry-runs) |
+| `--quiet` | false | Suppress progress bar |
+
+**Confirmation (`sync` without `--dry-run`):** User must type exact target ref, then `YES SYNC`. Abort on mismatch. Skipped when `--dry-run` is set.
+
+**Algorithm:**
+1. Discover shared tables; optional filter from compare JSON
+2. Validate schema + PK on both sides; skip failures
+3. Topological sort by FK (parents before children)
+4. Upsert pass: read source rows in batches, `INSERT ... ON CONFLICT DO UPDATE` on target
+5. Mirror pass (reverse FK order): delete target rows whose PK not in source
+
+**Does NOT sync:** Edge Functions, Storage, Auth, secrets, schema migrations, RLS.
+
+---
+
 ## Common Patterns for Agents
 
 ### Clone Edge Functions from project A to project B
@@ -434,6 +532,46 @@ python supabase-auth-copy.py restore --project-ref <target-ref> --token <pat> --
 
 ```
 python supabase-auth-copy.py restore --project-ref <target-ref> --token <pat> --dir auth_backup_<source-ref> --skip-config
+```
+
+### Compare two projects and assess sync feasibility (read-only)
+
+```
+python supabase-database-compare.py compare --source-ref <source-ref> --target-ref <target-ref> --token <pat>
+python supabase-database-compare.py compare --format json --no-open --output report.json
+```
+
+### Sync table data from source to stale snapshot target
+
+```
+REM Always compare first
+python supabase-database-compare.py compare --source-ref <source-ref> --target-ref <target-ref> --token <pat>
+
+REM Preview
+python supabase-database-sync.py plan --source-ref <source-ref> --target-ref <target-ref> --token <pat>
+
+REM Dry run (no confirmation)
+python supabase-database-sync.py sync --source-ref <source-ref> --target-ref <target-ref> --token <pat> --dry-run
+
+REM Execute (interactive confirmation required)
+python supabase-database-sync.py sync --source-ref <source-ref> --target-ref <target-ref> --token <pat>
+
+REM Use compare JSON to filter syncable tables
+python supabase-database-sync.py sync --from-report compare_<source>_vs_<target>_<ts>.json --target-ref <target-ref> --source-ref <source-ref> --token <pat>
+```
+
+### Sync one table only (cautious first run)
+
+```
+python supabase-database-sync.py sync --source-ref <source-ref> --target-ref <target-ref> --tables connection_requests --dry-run
+python supabase-database-sync.py sync --source-ref <source-ref> --target-ref <target-ref> --tables connection_requests
+```
+
+### Mirror mode (destructive — deletes target-only rows)
+
+```
+python supabase-database-sync.py sync --source-ref <source-ref> --target-ref <target-ref> --mode mirror --dry-run
+python supabase-database-sync.py sync --source-ref <source-ref> --target-ref <target-ref> --mode mirror
 ```
 
 ### Copy secrets to another project (via .env file)
@@ -471,6 +609,11 @@ python supabase-storage-copy.py restore --project-ref <ref> --token <pat> --serv
 | `HTTP 404: Cannot PUT /v1/projects/.../storage/buckets/...` | Attempted bucket update via Management API | Already fixed — tool uses Storage API for updates |
 | `HTTP 401` on any call | Invalid or expired token / service key | Regenerate credentials from Supabase dashboard |
 | `requests` ImportError | Dependency not installed | Run `pip install requests` |
+| Compare slow / rate limited | Large tables, ~120 req/min per project | Use `--skip-data`, `--tables`, or `--quiet`; retry after wait |
+| Sync blocked: no primary key | Table lacks PK | Add PK in schema or exclude with `--tables` |
+| Sync blocked: schema mismatch | Column diff between projects | Fix schema manually; not a migration tool |
+| Sync confirmation aborted | Wrong ref or didn't type `YES SYNC` | Re-run `sync`; use `--dry-run` to preview first |
+| `--from-report` file not found | Wrong path | Default search: `~/Documents/SupabaseTools/<filename>` |
 
 ---
 
@@ -481,7 +624,9 @@ All credentials can be passed via CLI flags or environment variables. Flags take
 | Variable | Equivalent flag | Scope | Notes |
 |----------|----------------|-------|-------|
 | `SUPABASE_ACCESS_TOKEN` | `--token` | Account-level PAT | Required by all tools |
-| `SUPABASE_PROJECT_REF` | `--project-ref` | Single project ref | Required by all tools |
+| `SUPABASE_PROJECT_REF` | `--project-ref` | Single project ref | Single-project tools |
+| `SUPABASE_SOURCE_PROJECT_REF` | `--source-ref` | Source project | `supabase-database-compare`, `supabase-database-sync` |
+| `SUPABASE_TARGET_PROJECT_REF` | `--target-ref` | Target project | `supabase-database-compare`, `supabase-database-sync` |
 | `SUPABASE_SERVICE_ROLE_KEY` | `--service-key` | Project-level | Required only for `supabase-storage-copy` |
 
 Full setup instructions (session vs persistent, all platforms): see root [README.md — Environment Variables](./README.md#-environment-variables).
@@ -541,4 +686,6 @@ python supabase-functions-backup.py backup
 python supabase-storage-copy.py backup
 python supabase-auth-copy.py list
 python supabase-secrets-manager.py list
+python supabase-database-compare.py compare
+python supabase-database-sync.py plan
 ```

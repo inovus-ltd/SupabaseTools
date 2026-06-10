@@ -2,7 +2,7 @@
 
 **Command-line tools for backing up, copying, and managing your [Supabase](https://supabase.com) projects.**
 
-Migrate storage buckets, clone auth settings, copy Edge Functions, and manage secrets — all from your terminal. No coding required.
+Compare and sync database tables, migrate storage buckets, clone auth settings, copy Edge Functions, and manage secrets — all from your terminal. No coding required.
 
 ---
 
@@ -22,7 +22,7 @@ irm https://raw.githubusercontent.com/inovus-ltd/SupabaseTools/master/install.ps
 curl -fsSL https://raw.githubusercontent.com/inovus-ltd/SupabaseTools/master/install.sh | sudo bash
 ```
 
-That's it. All 4 tools download automatically and are instantly available from any terminal window.
+That's it. All 6 tools download automatically and are instantly available from any terminal window.
 
 > 💡 **Windows tip:** To open PowerShell as Administrator — right-click the Start button → *Windows PowerShell (Admin)*
 >
@@ -36,12 +36,28 @@ That's it. All 4 tools download automatically and are instantly available from a
 
 ## 🧰 What's Included
 
+### Database — compare and sync
+
+| Tool | What it does |
+|------|-------------|
+| [**supabase-database-compare**](./supabase-database-compare/README.md) | **Read-only** comparison: schemas, data drift, Edge Functions, sync predictions |
+| [**supabase-database-sync**](./supabase-database-sync/README.md) | Sync table **data** source to target. **Modifies target only.** Full `--dry-run` on `plan` and `sync`. |
+
+### Project clone and migration
+
 | Tool | What it does |
 |------|-------------|
 | [**supabase-functions-backup**](./supabase-functions-backup/README.md) | Back up and restore your Edge Functions between projects |
 | [**supabase-storage-copy**](./supabase-storage-copy/README.md) | Back up and restore Storage buckets and all their files |
 | [**supabase-auth-copy**](./supabase-auth-copy/README.md) | Copy your Auth settings and third-party providers (e.g. Amazon Cognito) to another project |
 | [**supabase-secrets-manager**](./supabase-secrets-manager/README.md) | View and manage Edge Function secrets across projects |
+
+```
+supabase-database-compare compare
+supabase-database-sync plan
+supabase-database-sync sync --dry-run
+supabase-database-sync sync
+```
 
 ---
 
@@ -77,14 +93,16 @@ Or go to **Project Settings → General** and it's listed there as "Reference ID
 
 ## 🌍 Environment Variables
 
-Instead of passing `--token` and `--project-ref` on every command, store your credentials as environment variables. All four tools read them automatically. If you pass both a flag and an env var, the flag wins.
+Instead of passing `--token` and `--project-ref` on every command, store your credentials as environment variables. All six tools read them automatically. If you pass both a flag and an env var, the flag wins.
 
 ### Variables
 
 | Variable | Used by | Replaces flag |
 |----------|---------|---------------|
 | `SUPABASE_ACCESS_TOKEN` | All tools | `--token` |
-| `SUPABASE_PROJECT_REF` | All tools | `--project-ref` |
+| `SUPABASE_PROJECT_REF` | Single-project tools | `--project-ref` |
+| `SUPABASE_SOURCE_PROJECT_REF` | compare, sync | `--source-ref` |
+| `SUPABASE_TARGET_PROJECT_REF` | compare, sync | `--target-ref` |
 | `SUPABASE_SERVICE_ROLE_KEY` | `supabase-storage-copy` only | `--service-key` |
 
 ### Set your access token
@@ -96,6 +114,8 @@ Generate your token first (see [Personal Access Token](#personal-access-token-pa
 ```powershell
 $env:SUPABASE_ACCESS_TOKEN = "sbp_your_token_here"
 $env:SUPABASE_PROJECT_REF = "abcdefghijklmnop"
+$env:SUPABASE_SOURCE_PROJECT_REF = "sourceref"
+$env:SUPABASE_TARGET_PROJECT_REF = "targetref"
 ```
 
 These last until you close that PowerShell window.
@@ -192,6 +212,8 @@ Once set, you can omit `--token` and `--project-ref`:
 supabase-functions-backup backup
 supabase-auth-copy list
 supabase-secrets-manager list
+supabase-database-compare compare
+supabase-database-sync plan
 ```
 
 Storage copy also needs a service role key — set `SUPABASE_SERVICE_ROLE_KEY` the same way, or pass `--service-key` per command when working across two projects.
@@ -202,7 +224,23 @@ Storage copy also needs a service role key — set `SUPABASE_SERVICE_ROLE_KEY` t
 
 ## ⚡ Quick Examples
 
-Once installed, here's what you can do. Replace `YOUR_REF` and `YOUR_TOKEN` with your real values.
+Once installed, here's what you can do. Replace `YOUR_REF`, `SOURCE_REF`, `TARGET_REF`, and `YOUR_TOKEN` with your real values.
+
+### Compare two projects (read-only)
+
+```
+supabase-database-compare compare --source-ref SOURCE_REF --target-ref TARGET_REF --token YOUR_TOKEN
+```
+
+### Sync table data (modifies TARGET)
+
+```
+supabase-database-sync plan --source-ref SOURCE_REF --target-ref TARGET_REF --token YOUR_TOKEN
+supabase-database-sync sync --source-ref SOURCE_REF --target-ref TARGET_REF --token YOUR_TOKEN --dry-run
+supabase-database-sync sync --source-ref SOURCE_REF --target-ref TARGET_REF --token YOUR_TOKEN
+```
+
+`plan` and `sync --dry-run` are **full dry-runs** (validation, upsert counts, mirror deletes). No writes.
 
 ### Back up Edge Functions
 ```
@@ -258,6 +296,7 @@ The database has to be done first through the Supabase dashboard. Everything els
 | Storage buckets & files | ✅ Step 4 below |
 | Auth configuration | ✅ Step 5 below |
 | Edge Function secrets | ✅ Step 6 below |
+| New writes on source after restore | ✅ Step 7 below (compare + sync) |
 
 ---
 
@@ -349,12 +388,26 @@ supabase-secrets-manager set --project-ref TARGET_REF --token YOUR_TOKEN
 
 ---
 
-### Step 7 — Final Checks ✅
+### Step 7 — Refresh table data (if source moved on)
+
+```
+supabase-database-compare compare --source-ref SOURCE_REF --target-ref TARGET_REF --token YOUR_TOKEN
+supabase-database-sync plan --source-ref SOURCE_REF --target-ref TARGET_REF --token YOUR_TOKEN
+supabase-database-sync sync --source-ref SOURCE_REF --target-ref TARGET_REF --token YOUR_TOKEN --dry-run
+supabase-database-sync sync --source-ref SOURCE_REF --target-ref TARGET_REF --token YOUR_TOKEN
+```
+
+Compare is read-only. `plan` and `sync --dry-run` are full dry-runs. Real `sync` modifies the target only.
+
+---
+
+### Step 8 — Final Checks
 
 Run through this checklist before pointing any apps at the new project:
 
 **Database**
 - [ ] Tables and data look correct
+- [ ] Ran compare/sync if source kept receiving writes after restore
 - [ ] RLS policies are in place
 
 **Edge Functions**
@@ -403,22 +456,44 @@ supabase-auth-copy restore --project-ref TARGET_REF --token YOUR_TOKEN --dir aut
 
 supabase-secrets-manager list --project-ref SOURCE_REF --token YOUR_TOKEN
 supabase-secrets-manager push --project-ref TARGET_REF --token YOUR_TOKEN --env-file .env.production
+
+supabase-database-compare compare --source-ref SOURCE_REF --target-ref TARGET_REF --token YOUR_TOKEN
+supabase-database-sync plan     --source-ref SOURCE_REF --target-ref TARGET_REF --token YOUR_TOKEN
+supabase-database-sync sync     --source-ref SOURCE_REF --target-ref TARGET_REF --token YOUR_TOKEN --dry-run
+supabase-database-sync sync     --source-ref SOURCE_REF --target-ref TARGET_REF --token YOUR_TOKEN
 ```
 
 ---
 
-## �📖 Detailed Guides
+## Detailed Guides
 
 Each tool has its own README with full documentation, all commands, parameters, and real example output:
 
-- 📄 [supabase-functions-backup — full guide](./supabase-functions-backup/README.md)
-- 📄 [supabase-storage-copy — full guide](./supabase-storage-copy/README.md)
-- 📄 [supabase-auth-copy — full guide](./supabase-auth-copy/README.md)
-- 📄 [supabase-secrets-manager — full guide](./supabase-secrets-manager/README.md)
+- [supabase-database-compare](./supabase-database-compare/README.md)
+- [supabase-database-sync](./supabase-database-sync/README.md)
+- [supabase-functions-backup](./supabase-functions-backup/README.md)
+- [supabase-storage-copy](./supabase-storage-copy/README.md)
+- [supabase-auth-copy](./supabase-auth-copy/README.md)
+- [supabase-secrets-manager](./supabase-secrets-manager/README.md)
 
 ---
 
-## 🪟 Prefer to Download Manually?
+## Prefer to Download Manually?
+
+�📖 Detailed Guides
+
+Each tool has its own README with full documentation, all commands, parameters, and real example output:
+
+- [supabase-database-compare](./supabase-database-compare/README.md)
+- [supabase-database-sync](./supabase-database-sync/README.md)
+- [supabase-functions-backup](./supabase-functions-backup/README.md)
+- [supabase-storage-copy](./supabase-storage-copy/README.md)
+- [supabase-auth-copy](./supabase-auth-copy/README.md)
+- [supabase-secrets-manager](./supabase-secrets-manager/README.md)
+
+---
+
+## Prefer to Download Manually?
 
 If you'd rather download individual tools instead of using the installer:
 
@@ -428,6 +503,8 @@ If you'd rather download individual tools instead of using the installer:
 | supabase-storage-copy | [⬇ .exe](../../releases/latest/download/supabase-storage-copy-windows.exe) | [⬇ binary](../../releases/latest/download/supabase-storage-copy-macos) | [⬇ binary](../../releases/latest/download/supabase-storage-copy-linux) |
 | supabase-auth-copy | [⬇ .exe](../../releases/latest/download/supabase-auth-copy-windows.exe) | [⬇ binary](../../releases/latest/download/supabase-auth-copy-macos) | [⬇ binary](../../releases/latest/download/supabase-auth-copy-linux) |
 | supabase-secrets-manager | [⬇ .exe](../../releases/latest/download/supabase-secrets-manager-windows.exe) | [⬇ binary](../../releases/latest/download/supabase-secrets-manager-macos) | [⬇ binary](../../releases/latest/download/supabase-secrets-manager-linux) |
+| supabase-database-compare | [⬇ .exe](../../releases/latest/download/supabase-database-compare-windows.exe) | [⬇ binary](../../releases/latest/download/supabase-database-compare-macos) | [⬇ binary](../../releases/latest/download/supabase-database-compare-linux) |
+| supabase-database-sync | [⬇ .exe](../../releases/latest/download/supabase-database-sync-windows.exe) | [⬇ binary](../../releases/latest/download/supabase-database-sync-macos) | [⬇ binary](../../releases/latest/download/supabase-database-sync-linux) |
 
 Save the file somewhere on your computer, then run it from your terminal in that folder.
 
@@ -457,6 +534,8 @@ pip install requests
 **3. Run any tool directly:**
 ```bash
 python supabase-functions-backup/supabase-functions-backup.py list --project-ref YOUR_REF --token YOUR_TOKEN
+python supabase-database-compare/supabase-database-compare.py compare --source-ref SOURCE_REF --target-ref TARGET_REF --token YOUR_TOKEN
+python supabase-database-sync/supabase-database-sync.py plan --source-ref SOURCE_REF --target-ref TARGET_REF --token YOUR_TOKEN
 ```
 
 **Building executables locally:**
