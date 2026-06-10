@@ -64,8 +64,9 @@ python supabase-database-compare.py list --project-ref abcdefghijklmnop --schema
 | `--skip-edge-functions` | No | false | Skip Edge Function comparison |
 | `--deep` | No | false | Row-level data diff (see below) |
 | `--max-rows` | No | `1000` | Max rows per table in `--deep` mode |
-| `--output` | No | auto (text mode) | JSON report file path |
-| `--format` | No | `text` | `text` or `json` |
+| `--output` | No | auto (text/html) | Report file path (`.json` or `.html`) |
+| `--format` | No | `text` | `text`, `json`, or `html` |
+| `--quiet` | No | false | Suppress progress bar |
 
 \* Required unless the corresponding environment variable is set.
 
@@ -74,7 +75,7 @@ python supabase-database-compare.py list --project-ref abcdefghijklmnop --schema
 ### Tables (schema)
 
 - Tables only in source / only in target / in both
-- For shared tables: column name, type, nullable, and default differences
+- For shared tables: column-level differences — columns only on source, only on target, or changed (type/nullable/default)
 
 ### Edge Functions
 
@@ -103,11 +104,21 @@ Postgres does not store a true "last written" time per table. This tool reports 
 
 ## Output
 
-**Console (default):** human-readable summary with sections for tables, Edge Functions, data, and last-write estimates.
+**Console (default):** human-readable summary. SOURCE and TARGET project refs are labeled on every section. Tables with schema differences show **column-level detail** (not just table names).
 
-**JSON report:** saved automatically to `~/Documents/SupabaseTools/compare_<source>_vs_<target>_<timestamp>.json` when using text output. Override with `--output`.
+**Progress:** while comparing, a progress bar shows the current step (schema columns per table, Edge Functions, data checksums, last-write estimates). Use `--quiet` to disable.
 
-**`--format json`:** prints the full report as JSON to stdout.
+**JSON report:** saved automatically to `~/Documents/SupabaseTools/compare_<source>_vs_<target>_<timestamp>.json` when using `--format text`. Override with `--output`.
+
+**HTML report (recommended for readability):**
+
+```cmd
+python supabase-database-compare.py compare --source-ref sourceref --target-ref targetref --format html
+```
+
+Saves a self-contained HTML file with color-coded **SOURCE** (blue) and **TARGET** (green) columns, summary cards, schema diff tables, and side-by-side data/last-write comparisons. Open in any browser.
+
+**`--format json`:** prints the full report as JSON to stdout (progress still shown on stderr's terminal).
 
 ## Environment Variables
 

@@ -26,6 +26,7 @@ Environment variables:
 
 import argparse
 import hashlib
+import html
 import json
 import os
 import re
@@ -74,6 +75,58 @@ def _table_key(schema: str, table: str) -> str:
 def _parse_table_key(key: str) -> tuple:
     schema, table = key.split(".", 1)
     return schema, table
+
+
+# ---------------------------------------------------------------------------
+# Progress
+# ---------------------------------------------------------------------------
+
+class Progress:
+    """Simple terminal progress bar (stdlib only, works in PowerShell/CMD)."""
+
+    def __init__(self, enabled: bool = True, width: int = 28):
+        self.enabled = enabled and sys.stdout.isatty()
+        self.width = width
+        self.total = 0
+        self.current = 0
+        self._active = False
+
+    def start(self, total: int, label: str = ""):
+        self.total = max(total, 1)
+        self.current = 0
+        self._active = True
+        self._draw(label)
+
+    def step(self, label: str = ""):
+        if not self._active:
+            return
+        self.current = min(self.current + 1, self.total)
+        self._draw(label)
+
+    def finish(self, label: str = "Done"):
+        if not self.enabled:
+            if label and self._active:
+                print(f"  {label}")
+            self._active = False
+            return
+        if self._active:
+            self.current = self.total
+            self._draw(label)
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+        self._active = False
+
+    def _draw(self, label: str):
+        if not self.enabled:
+            if label:
+                print(f"  {label}")
+            return
+        filled = int(self.width * self.current / self.total)
+        bar = "#" * filled + "-" * (self.width - filled)
+        pct = int(100 * self.current / self.total)
+        text = f"\r  [{bar}] {self.current}/{self.total} ({pct:3d}%) {label[:55]:<55}"
+        sys.stdout.write(text)
+        sys.stdout.flush()
 
 
 # ---------------------------------------------------------------------------
@@ -277,19 +330,36 @@ def diff_columns(source_cols: list, target_cols: list) -> dict:
     }
 
 
-def compare_table_schemas(api: SupabaseManagementAPI, source_ref: str, target_ref: str, schemas: list) -> dict:
+def compare_table_schemas(
+    api: SupabaseManagementAPI,
+    source_ref: str,
+    target_ref: str,
+    schemas: list,
+    progress: Progress = None,
+) -> dict:
+    if progress:
+        progress.start(2 + 1, "Listing tables on source")
     source_tables = collect_tables(api, source_ref, schemas)
+    if progress:
+        progress.step("Listing tables on target")
     target_tables = collect_tables(api, target_ref, schemas)
     source_keys = set(source_tables)
     target_keys = set(target_tables)
     only_source = sorted(source_keys - target_keys)
     only_target = sorted(target_keys - source_keys)
     shared = sorted(source_keys & target_keys)
+    if progress:
+        progress.total = 2 + max(len(shared) * 2, 1)
+        progress.current = 2
     identical = []
     different = []
-    for key in shared:
+    for i, key in enumerate(shared):
         schema, table = _parse_table_key(key)
+        if progress:
+            progress.step(f"Schema columns: {key} ({i + 1}/{len(shared)})")
         src_cols = collect_columns(api, source_ref, schema, table)
+        if progress:
+            progress.step(f"Schema columns: {key} target")
         tgt_cols = collect_columns(api, target_ref, schema, table)
         col_diff = diff_columns(src_cols, tgt_cols)
         entry = {"table": key, "column_diff": col_diff}
@@ -297,6 +367,8 @@ def compare_table_schemas(api: SupabaseManagementAPI, source_ref: str, target_re
             identical.append(key)
         else:
             different.append(entry)
+    if progress:
+        progress.finish("Table schemas complete")
     return {
         "only_in_source": only_source,
         "only_in_target": only_target,
@@ -322,11 +394,22 @@ def _function_meta_subset(meta: dict) -> dict:
     return {k: meta.get(k) for k in EDGE_META_FIELDS}
 
 
-def collect_edge_functions(api: SupabaseManagementAPI, project_ref: str, include_hashes: bool = True) -> dict:
+def collect_edge_functions(
+    api: SupabaseManagementAPI,
+    project_ref: str,
+    include_hashes: bool = True,
+    progress: Progress = None,
+    label: str = "",
+) -> dict:
     functions = api.list_functions(project_ref)
+    total = max(len(functions) * (3 if include_hashes else 2), 1)
+    if progress:
+        progress.start(total, f"{label}: listing functions")
     result = {}
-    for fn in functions:
+    for i, fn in enumerate(functions):
         slug = fn["slug"]
+        if progress:
+            progress.step(f"{label}: {slug} metadata ({i + 1}/{len(functions)})")
         meta = api.get_function_meta(project_ref, slug)
         entry = {
             "slug": slug,
@@ -335,17 +418,24 @@ def collect_edge_functions(api: SupabaseManagementAPI, project_ref: str, include
             "source_hash": None,
         }
         if include_hashes:
+            if progress:
+                progress.step(f"{label}: {slug} source")
             source_files = api.get_function_source_files(project_ref, slug)
             entry["source_hash"] = _function_source_hash(source_files)
         result[slug] = entry
+    if progress:
+        progress.finish(f"{label}: Edge Functions complete")
     return result
 
 
-def compare_edge_functions(api: SupabaseManagementAPI, source_ref: str, target_ref: str) -> dict:
-    print("  Collecting Edge Functions from source...")
-    source_fns = collect_edge_functions(api, source_ref)
-    print("  Collecting Edge Functions from target...")
-    target_fns = collect_edge_functions(api, target_ref)
+def compare_edge_functions(
+    api: SupabaseManagementAPI,
+    source_ref: str,
+    target_ref: str,
+    progress: Progress = None,
+) -> dict:
+    source_fns = collect_edge_functions(api, source_ref, progress=progress, label="Source")
+    target_fns = collect_edge_functions(api, target_ref, progress=progress, label="Target")
     source_slugs = set(source_fns)
     target_slugs = set(target_fns)
     only_source = sorted(source_slugs - target_slugs)
@@ -441,16 +531,32 @@ def _row_pk_key(row: dict, pk_cols: list) -> tuple:
     return (json.dumps(row, sort_keys=True, default=str),)
 
 
-def compare_table_data_summary(api: SupabaseManagementAPI, source_ref: str, target_ref: str,
-                               table_keys: list) -> dict:
+def compare_table_data_summary(
+    api: SupabaseManagementAPI,
+    source_ref: str,
+    target_ref: str,
+    table_keys: list,
+    progress: Progress = None,
+) -> dict:
     matching = []
     different = []
-    for key in table_keys:
+    total_steps = max(len(table_keys) * 5, 1)
+    if progress:
+        progress.start(total_steps, "Data: starting")
+    for i, key in enumerate(table_keys):
         schema, table = _parse_table_key(key)
+        if progress:
+            progress.step(f"Data: {key} PK ({i + 1}/{len(table_keys)})")
         pk_cols = collect_primary_key_columns(api, source_ref, schema, table)
+        if progress:
+            progress.step(f"Data: {key} row counts")
         src_count = get_row_count(api, source_ref, schema, table)
         tgt_count = get_row_count(api, target_ref, schema, table)
+        if progress:
+            progress.step(f"Data: {key} source checksum")
         src_checksum = get_table_checksum(api, source_ref, schema, table, pk_cols)
+        if progress:
+            progress.step(f"Data: {key} target checksum")
         tgt_checksum = get_table_checksum(api, target_ref, schema, table, pk_cols)
         entry = {
             "table": key,
@@ -465,14 +571,28 @@ def compare_table_data_summary(api: SupabaseManagementAPI, source_ref: str, targ
             matching.append(key)
         else:
             different.append(entry)
+    if progress:
+        progress.finish("Data summary complete")
     return {"matching": matching, "different": different}
 
 
-def compare_table_data_deep(api: SupabaseManagementAPI, source_ref: str, target_ref: str,
-                            table_keys: list, max_rows: int, explicit_tables: bool) -> dict:
+def compare_table_data_deep(
+    api: SupabaseManagementAPI,
+    source_ref: str,
+    target_ref: str,
+    table_keys: list,
+    max_rows: int,
+    explicit_tables: bool,
+    progress: Progress = None,
+) -> dict:
     results = []
-    for key in table_keys:
+    total_steps = max(len(table_keys) * 4, 1)
+    if progress:
+        progress.start(total_steps, "Data deep: starting")
+    for i, key in enumerate(table_keys):
         schema, table = _parse_table_key(key)
+        if progress:
+            progress.step(f"Data deep: {key} ({i + 1}/{len(table_keys)})")
         pk_cols = collect_primary_key_columns(api, source_ref, schema, table)
         src_count = get_row_count(api, source_ref, schema, table)
         tgt_count = get_row_count(api, target_ref, schema, table)
@@ -485,6 +605,8 @@ def compare_table_data_deep(api: SupabaseManagementAPI, source_ref: str, target_
                 "target_row_count": tgt_count,
             })
             continue
+        if progress:
+            progress.step(f"Data deep: {key} fetch rows")
         src_rows = fetch_table_rows(api, source_ref, schema, table, pk_cols, max_rows)
         tgt_rows = fetch_table_rows(api, target_ref, schema, table, pk_cols, max_rows)
         src_map = {_row_pk_key(r, pk_cols): r for r in src_rows}
@@ -512,6 +634,8 @@ def compare_table_data_deep(api: SupabaseManagementAPI, source_ref: str, target_
             "changed": changed,
             "identical": not only_source and not only_target and not changed,
         })
+    if progress:
+        progress.finish("Data deep complete")
     return {"tables": results}
 
 
@@ -579,11 +703,23 @@ def estimate_last_write(api: SupabaseManagementAPI, project_ref: str, schema: st
     }
 
 
-def collect_last_write_estimates(api: SupabaseManagementAPI, project_ref: str, table_keys: list) -> dict:
+def collect_last_write_estimates(
+    api: SupabaseManagementAPI,
+    project_ref: str,
+    table_keys: list,
+    progress: Progress = None,
+    label: str = "",
+) -> dict:
     estimates = {}
-    for key in table_keys:
+    if progress:
+        progress.start(max(len(table_keys), 1), f"{label}: last-write estimates")
+    for i, key in enumerate(table_keys):
         schema, table = _parse_table_key(key)
+        if progress:
+            progress.step(f"{label}: {key} ({i + 1}/{len(table_keys)})")
         estimates[key] = estimate_last_write(api, project_ref, schema, table)
+    if progress:
+        progress.finish(f"{label}: last-write complete")
     return estimates
 
 
@@ -591,40 +727,83 @@ def collect_last_write_estimates(api: SupabaseManagementAPI, project_ref: str, t
 # Report output
 # ---------------------------------------------------------------------------
 
-def _default_output_path(source_ref: str, target_ref: str) -> str:
+def _default_output_path(source_ref: str, target_ref: str, ext: str = ".json") -> str:
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    name = f"compare_{source_ref}_vs_{target_ref}_{ts}.json"
+    name = f"compare_{source_ref}_vs_{target_ref}_{ts}{ext}"
     return str(_default_report_root() / name)
 
 
+def _format_last_write_value(entry: dict) -> str:
+    val = entry.get("last_write_estimate")
+    if val is not None:
+        return str(val)
+    if entry.get("method") == "pg_stat_user_tables":
+        stats = entry.get("stats") or {}
+        return (
+            f"ins={stats.get('n_tup_ins', '?')} "
+            f"upd={stats.get('n_tup_upd', '?')} "
+            f"del={stats.get('n_tup_del', '?')}"
+        )
+    return "unavailable"
+
+
+def _format_column_spec(col: dict) -> str:
+    nullable = "NULL" if col.get("is_nullable") == "YES" else "NOT NULL"
+    default = col.get("column_default")
+    default_s = f" default={default}" if default else ""
+    return f"{col.get('data_type')} {nullable}{default_s}"
+
+
+def _print_schema_column_diff(table_entry: dict, source_ref: str, target_ref: str):
+    cd = table_entry["column_diff"]
+    table = table_entry["table"]
+    if cd.get("only_in_source"):
+        print(f"       columns only in SOURCE ({source_ref}):")
+        for col in cd["only_in_source"]:
+            print(f"         + {col}")
+    if cd.get("only_in_target"):
+        print(f"       columns only in TARGET ({target_ref}):")
+        for col in cd["only_in_target"]:
+            print(f"         + {col}")
+    for diff in cd.get("different", []):
+        name = diff["column"]
+        src = _format_column_spec(diff["source"])
+        tgt = _format_column_spec(diff["target"])
+        print(f"       column {name}:")
+        print(f"         SOURCE ({source_ref}): {src}")
+        print(f"         TARGET ({target_ref}): {tgt}")
+
+
 def print_text_report(report: dict):
+    source_ref = report["source_ref"]
+    target_ref = report["target_ref"]
     print(f"\n Comparing databases")
-    print(f"   Source: {report['source_ref']}")
-    print(f"   Target: {report['target_ref']}")
+    print(f"   SOURCE: {source_ref}")
+    print(f"   TARGET: {target_ref}")
     print(f"   Compared at: {report['compared_at']}\n")
 
     ts = report["tables"]
-    print(" Tables")
-    print(f"   Only in source: {len(ts['only_in_source'])}")
+    print(" Tables (schema)")
+    print(f"   Only in SOURCE ({source_ref}): {len(ts['only_in_source'])}")
     if ts["only_in_source"]:
         print(f"     {', '.join(ts['only_in_source'])}")
-    print(f"   Only in target: {len(ts['only_in_target'])}")
+    print(f"   Only in TARGET ({target_ref}): {len(ts['only_in_target'])}")
     if ts["only_in_target"]:
         print(f"     {', '.join(ts['only_in_target'])}")
-    print(f"   Identical:      {len(ts['identical'])}")
-    diff_names = [d["table"] for d in ts["different"]]
-    print(f"   Different:      {len(ts['different'])}")
-    if diff_names:
-        print(f"     {', '.join(diff_names)}")
+    print(f"   Identical schema: {len(ts['identical'])}")
+    print(f"   Different schema: {len(ts['different'])}")
+    for entry in ts["different"]:
+        print(f"     {entry['table']}:")
+        _print_schema_column_diff(entry, source_ref, target_ref)
     print()
 
     if report.get("edge_functions") is not None:
         ef = report["edge_functions"]
         print(" Edge Functions")
-        print(f"   Only in source: {len(ef['only_in_source'])}")
+        print(f"   Only in SOURCE ({source_ref}): {len(ef['only_in_source'])}")
         if ef["only_in_source"]:
             print(f"     {', '.join(ef['only_in_source'])}")
-        print(f"   Only in target: {len(ef['only_in_target'])}")
+        print(f"   Only in TARGET ({target_ref}): {len(ef['only_in_target'])}")
         if ef["only_in_target"]:
             print(f"     {', '.join(ef['only_in_target'])}")
         print(f"   Identical:      {len(ef['identical'])}")
@@ -642,7 +821,7 @@ def print_text_report(report: dict):
             for d in data["different"]:
                 print(
                     f"     {d['table']}: "
-                    f"{d['source_row_count']} vs {d['target_row_count']} rows, "
+                    f"SOURCE={d['source_row_count']} TARGET={d['target_row_count']} rows, "
                     f"checksum {'match' if d['checksum_match'] else 'mismatch'}"
                 )
             print()
@@ -667,12 +846,214 @@ def print_text_report(report: dict):
         for key in sorted(lw["source"].keys()):
             s = lw["source"][key]
             t = lw["target"][key]
-            s_val = s.get("last_write_estimate") or s.get("method", "?")
-            t_val = t.get("last_write_estimate") or t.get("method", "?")
             print(f"   {key}")
-            print(f"     source: {s_val} ({s.get('method', '?')})")
-            print(f"     target: {t_val} ({t.get('method', '?')})")
+            print(f"     SOURCE ({source_ref}): {_format_last_write_value(s)} ({s.get('method', '?')})")
+            print(f"     TARGET ({target_ref}): {_format_last_write_value(t)} ({t.get('method', '?')})")
         print()
+
+
+def write_html_report(report: dict) -> str:
+    """Return a self-contained HTML document for the compare report."""
+    source_ref = html.escape(report["source_ref"])
+    target_ref = html.escape(report["target_ref"])
+    compared_at = html.escape(report.get("compared_at", ""))
+
+    def esc(val):
+        return html.escape(str(val)) if val is not None else "<em>—</em>"
+
+    def badge(text, css_class):
+        return f'<span class="badge {css_class}">{html.escape(text)}</span>'
+
+    parts = [f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compare {source_ref} vs {target_ref}</title>
+<style>
+  :root {{
+    --source: #2563eb; --source-bg: #eff6ff;
+    --target: #059669; --target-bg: #ecfdf5;
+    --warn: #d97706; --bad: #dc2626; --ok: #16a34a;
+    --bg: #f8fafc; --card: #fff; --border: #e2e8f0; --text: #0f172a; --muted: #64748b;
+  }}
+  * {{ box-sizing: border-box; }}
+  body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 0; background: var(--bg); color: var(--text); line-height: 1.5; }}
+  .wrap {{ max-width: 1200px; margin: 0 auto; padding: 24px; }}
+  h1 {{ font-size: 1.5rem; margin: 0 0 8px; }}
+  h2 {{ font-size: 1.15rem; margin: 28px 0 12px; border-bottom: 2px solid var(--border); padding-bottom: 6px; }}
+  h3 {{ font-size: 1rem; margin: 16px 0 8px; }}
+  .meta {{ color: var(--muted); font-size: 0.9rem; margin-bottom: 20px; }}
+  .legend {{ display: flex; gap: 16px; flex-wrap: wrap; margin: 16px 0 24px; }}
+  .legend .badge {{ font-size: 0.85rem; }}
+  .badge {{ display: inline-block; padding: 4px 10px; border-radius: 6px; font-weight: 600; font-size: 0.8rem; }}
+  .badge-source {{ background: var(--source-bg); color: var(--source); border: 1px solid #bfdbfe; }}
+  .badge-target {{ background: var(--target-bg); color: var(--target); border: 1px solid #a7f3d0; }}
+  .cards {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 12px 0; }}
+  .card {{ background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }}
+  .card .n {{ font-size: 1.4rem; font-weight: 700; }}
+  .card .l {{ font-size: 0.8rem; color: var(--muted); }}
+  table {{ width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin: 12px 0; font-size: 0.9rem; }}
+  th, td {{ padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }}
+  th {{ background: #f1f5f9; font-weight: 600; }}
+  th.col-source {{ color: var(--source); }}
+  th.col-target {{ color: var(--target); }}
+  tr:last-child td {{ border-bottom: none; }}
+  .diff {{ background: #fff7ed; }}
+  .ok {{ color: var(--ok); }}
+  .bad {{ color: var(--bad); }}
+  .mono {{ font-family: ui-monospace, Consolas, monospace; font-size: 0.85rem; }}
+  .schema-box {{ background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin: 10px 0; }}
+  .schema-box h3 {{ margin-top: 0; }}
+  ul {{ margin: 6px 0; padding-left: 20px; }}
+  .empty {{ color: var(--muted); font-style: italic; }}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Supabase Database Compare</h1>
+<p class="meta">Compared at {compared_at}</p>
+<div class="legend">
+  {badge("SOURCE: " + source_ref, "badge-source")}
+  {badge("TARGET: " + target_ref, "badge-target")}
+</div>
+"""]
+
+    ts = report["tables"]
+    parts.append("<h2>Tables (schema)</h2>")
+    parts.append('<div class="cards">')
+    for label, key in [
+        (f"Only in SOURCE", "only_in_source"),
+        (f"Only in TARGET", "only_in_target"),
+        ("Identical", "identical"),
+        ("Different", "different"),
+    ]:
+        count = len(ts[key]) if key != "different" else len(ts["different"])
+        parts.append(f'<div class="card"><div class="n">{count}</div><div class="l">{html.escape(label)}</div></div>')
+    parts.append("</div>")
+
+    if ts["only_in_source"]:
+        parts.append(f"<h3>Only in SOURCE ({source_ref})</h3><ul>")
+        for t in ts["only_in_source"]:
+            parts.append(f"<li class='mono'>{esc(t)}</li>")
+        parts.append("</ul>")
+    if ts["only_in_target"]:
+        parts.append(f"<h3>Only in TARGET ({target_ref})</h3><ul>")
+        for t in ts["only_in_target"]:
+            parts.append(f"<li class='mono'>{esc(t)}</li>")
+        parts.append("</ul>")
+
+    if ts["different"]:
+        parts.append("<h3>Schema differences (column-level)</h3>")
+        for entry in ts["different"]:
+            table = esc(entry["table"])
+            cd = entry["column_diff"]
+            parts.append(f'<div class="schema-box"><h3 class="mono">{table}</h3>')
+            if cd.get("only_in_source"):
+                parts.append(f"<p><strong>Columns only in SOURCE ({source_ref}):</strong></p><ul>")
+                for col in cd["only_in_source"]:
+                    parts.append(f"<li class='mono'>+ {esc(col)}</li>")
+                parts.append("</ul>")
+            if cd.get("only_in_target"):
+                parts.append(f"<p><strong>Columns only in TARGET ({target_ref}):</strong></p><ul>")
+                for col in cd["only_in_target"]:
+                    parts.append(f"<li class='mono'>+ {esc(col)}</li>")
+                parts.append("</ul>")
+            if cd.get("different"):
+                parts.append("<table><tr><th>Column</th><th class='col-source'>SOURCE</th><th class='col-target'>TARGET</th></tr>")
+                for diff in cd["different"]:
+                    parts.append(
+                        f"<tr class='diff'><td class='mono'>{esc(diff['column'])}</td>"
+                        f"<td class='mono'>{esc(_format_column_spec(diff['source']))}</td>"
+                        f"<td class='mono'>{esc(_format_column_spec(diff['target']))}</td></tr>"
+                    )
+                parts.append("</table>")
+            parts.append("</div>")
+
+    if report.get("edge_functions") is not None:
+        ef = report["edge_functions"]
+        parts.append("<h2>Edge Functions</h2>")
+        parts.append('<div class="cards">')
+        for label, key in [
+            ("Only in SOURCE", "only_in_source"),
+            ("Only in TARGET", "only_in_target"),
+            ("Identical", "identical"),
+            ("Different", "different"),
+        ]:
+            count = len(ef[key])
+            parts.append(f'<div class="card"><div class="n">{count}</div><div class="l">{label}</div></div>')
+        parts.append("</div>")
+        if ef["different"]:
+            parts.append("<table><tr><th>Slug</th><th>Diff</th><th class='col-source'>SOURCE meta</th><th class='col-target'>TARGET meta</th></tr>")
+            for d in ef["different"]:
+                parts.append(
+                    f"<tr class='diff'><td class='mono'>{esc(d['slug'])}</td>"
+                    f"<td>{esc(', '.join(d['reasons']))}</td>"
+                    f"<td class='mono'>{esc(json.dumps(d['source_meta'], default=str))}</td>"
+                    f"<td class='mono'>{esc(json.dumps(d['target_meta'], default=str))}</td></tr>"
+                )
+            parts.append("</table>")
+
+    if report.get("data") is not None:
+        data = report["data"]
+        parts.append("<h2>Table data</h2>")
+        if "matching" in data:
+            parts.append(
+                f'<p>Matching: <span class="ok">{len(data["matching"])}</span> · '
+                f'Different: <span class="bad">{len(data["different"])}</span></p>'
+            )
+            if data["different"]:
+                parts.append(
+                    "<table><tr><th>Table</th>"
+                    f"<th class='col-source'>SOURCE rows</th>"
+                    f"<th class='col-target'>TARGET rows</th>"
+                    "<th>Checksum</th></tr>"
+                )
+                for d in data["different"]:
+                    chk = "match" if d["checksum_match"] else "mismatch"
+                    cls = "ok" if d["checksum_match"] else "bad"
+                    parts.append(
+                        f"<tr class='diff'><td class='mono'>{esc(d['table'])}</td>"
+                        f"<td>{d['source_row_count']}</td><td>{d['target_row_count']}</td>"
+                        f"<td class='{cls}'>{chk}</td></tr>"
+                    )
+                parts.append("</table>")
+        elif "tables" in data:
+            parts.append("<table><tr><th>Table</th><th>Status</th><th>Details</th></tr>")
+            for t in data["tables"]:
+                if t.get("skipped"):
+                    parts.append(f"<tr><td class='mono'>{esc(t['table'])}</td><td colspan='2'>{esc(t['reason'])}</td></tr>")
+                else:
+                    status = "identical" if t["identical"] else "different"
+                    detail = (
+                        f"SOURCE={t['source_row_count']} TARGET={t['target_row_count']} · "
+                        f"{len(t['only_in_source'])} only source, {len(t['only_in_target'])} only target, "
+                        f"{len(t['changed'])} changed"
+                    )
+                    parts.append(f"<tr><td class='mono'>{esc(t['table'])}</td><td>{status}</td><td>{detail}</td></tr>")
+            parts.append("</table>")
+
+    if report.get("last_write"):
+        lw = report["last_write"]
+        parts.append("<h2>Last write estimates</h2>")
+        parts.append(
+            "<table><tr><th>Table</th>"
+            f"<th class='col-source'>SOURCE ({source_ref})</th>"
+            f"<th class='col-target'>TARGET ({target_ref})</th>"
+            "<th>Method</th></tr>"
+        )
+        for key in sorted(lw["source"].keys()):
+            s, t = lw["source"][key], lw["target"][key]
+            parts.append(
+                f"<tr><td class='mono'>{esc(key)}</td>"
+                f"<td>{esc(_format_last_write_value(s))}</td>"
+                f"<td>{esc(_format_last_write_value(t))}</td>"
+                f"<td class='mono'>S:{esc(s.get('method','?'))} / T:{esc(t.get('method','?'))}</td></tr>"
+            )
+        parts.append("</table>")
+
+    parts.append("</div></body></html>")
+    return "".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -711,13 +1092,15 @@ def do_compare(
     max_rows: int,
     output_path: str,
     fmt: str,
+    quiet: bool = False,
 ):
-    print(f"\n Comparing projects")
-    print(f"   Source: {source_ref}")
-    print(f"   Target: {target_ref}\n")
+    progress = Progress(enabled=not quiet)
 
-    print("  Comparing table schemas...")
-    table_diff = compare_table_schemas(api, source_ref, target_ref, schemas)
+    print(f"\n Comparing projects")
+    print(f"   SOURCE: {source_ref}")
+    print(f"   TARGET: {target_ref}\n")
+
+    table_diff = compare_table_schemas(api, source_ref, target_ref, schemas, progress=progress)
 
     shared_tables = sorted(set(table_diff["identical"]) | {d["table"] for d in table_diff["different"]})
     if tables_filter:
@@ -733,22 +1116,21 @@ def do_compare(
 
     edge_diff = None
     if not skip_edge_functions:
-        print("  Comparing Edge Functions...")
-        edge_diff = compare_edge_functions(api, source_ref, target_ref)
+        edge_diff = compare_edge_functions(api, source_ref, target_ref, progress=progress)
 
     data_diff = None
     if not skip_data and shared_tables:
         if deep:
-            print(f"  Comparing table data (deep, max {max_rows} rows per table)...")
             data_diff = compare_table_data_deep(
                 api, source_ref, target_ref, shared_tables, max_rows,
                 explicit_tables=bool(tables_filter),
+                progress=progress,
             )
         else:
-            print("  Comparing table data (summary: row counts + checksums)...")
-            data_diff = compare_table_data_summary(api, source_ref, target_ref, shared_tables)
+            data_diff = compare_table_data_summary(
+                api, source_ref, target_ref, shared_tables, progress=progress,
+            )
 
-    print("  Estimating last-write times...")
     last_write_keys = sorted(
         set(table_diff["only_in_source"])
         | set(table_diff["only_in_target"])
@@ -756,8 +1138,12 @@ def do_compare(
         | {d["table"] for d in table_diff["different"]}
     )
     last_write = {
-        "source": collect_last_write_estimates(api, source_ref, last_write_keys),
-        "target": collect_last_write_estimates(api, target_ref, last_write_keys),
+        "source": collect_last_write_estimates(
+            api, source_ref, last_write_keys, progress=progress, label="Source",
+        ),
+        "target": collect_last_write_estimates(
+            api, target_ref, last_write_keys, progress=progress, label="Target",
+        ),
     }
 
     report = {
@@ -776,11 +1162,19 @@ def do_compare(
         if not out.is_absolute():
             out = _default_report_root() / out
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps(report, indent=2, default=str))
+        if fmt == "html" or str(out).lower().endswith(".html"):
+            out.write_text(write_html_report(report), encoding="utf-8")
+        else:
+            out.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
         print(f"\n  Report saved: {out.resolve()}")
 
     if fmt == "json":
         print(json.dumps(report, indent=2, default=str))
+    elif fmt == "html":
+        if not output_path:
+            print(write_html_report(report))
+        else:
+            print(f"\n  Open the HTML report in your browser for side-by-side formatting.")
     else:
         print_text_report(report)
 
@@ -805,6 +1199,8 @@ Examples:
   python %(prog)s compare --source-ref sourceref --target-ref targetref --tables users orders --deep
 
   python %(prog)s compare --source-ref sourceref --target-ref targetref --skip-data --format json
+
+  python %(prog)s compare --source-ref sourceref --target-ref targetref --format html
 
 This tool is read-only. It never modifies, deletes, or deploys anything on your projects.
 
@@ -877,9 +1273,19 @@ Environment variables:
     cp.add_argument(
         "--output",
         default=None,
-        help="Save JSON report to this path (default: ~/Documents/SupabaseTools/compare_<source>_vs_<target>_<ts>.json).",
+        help="Save report to this path (.json or .html; default path depends on --format).",
     )
-    cp.add_argument("--format", choices=["text", "json"], default="text", help="Output format (default: text).")
+    cp.add_argument(
+        "--format",
+        choices=["text", "json", "html"],
+        default="text",
+        help="Output format: text summary, json, or html report (default: text).",
+    )
+    cp.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress progress bar (print step labels only when not a TTY).",
+    )
 
     return parser
 
@@ -913,8 +1319,9 @@ def main():
             print("  Or set SUPABASE_SOURCE_PROJECT_REF and SUPABASE_TARGET_PROJECT_REF.")
             sys.exit(1)
         output = args.output
-        if output is None and args.format == "text":
-            output = _default_output_path(args.source_ref, args.target_ref)
+        if output is None and args.format in ("text", "html"):
+            ext = ".html" if args.format == "html" else ".json"
+            output = _default_output_path(args.source_ref, args.target_ref, ext)
         do_compare(
             api,
             args.source_ref,
@@ -927,6 +1334,7 @@ def main():
             args.max_rows,
             output,
             args.format,
+            args.quiet,
         )
 
 
