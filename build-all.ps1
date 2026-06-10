@@ -9,7 +9,8 @@ $tools = @(
     @{ Name = "supabase-storage-copy";     Script = "supabase-storage-copy\supabase-storage-copy.py" },
     @{ Name = "supabase-auth-copy";        Script = "supabase-auth-copy\supabase-auth-copy.py" },
     @{ Name = "supabase-secrets-manager";  Script = "supabase-secrets-manager\supabase-secrets-manager.py" },
-    @{ Name = "supabase-database-compare"; Script = "supabase-database-compare\supabase-database-compare.py" }
+    @{ Name = "supabase-database-compare"; Script = "supabase-database-compare\supabase-database-compare.py" },
+    @{ Name = "supabase-database-sync";    Script = "supabase-database-sync\supabase-database-sync.py" }
 )
 
 Write-Host ""

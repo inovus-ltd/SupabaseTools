@@ -105,6 +105,28 @@ Postgres does not store a true "last written" time per table. This tool reports 
 2. If no timestamp column: `pg_stat_user_tables` counters (inserts/updates/deletes since stats reset — **not** an absolute last-write time)
 3. If neither is available: `unavailable`
 
+## Sync prediction
+
+The HTML report includes a **Data Sync Prediction** section with an overall verdict:
+
+| Verdict | Meaning |
+|---------|---------|
+| Sync Recommended | Schemas match; source is newer — typical snapshot refresh |
+| Partial Sync Possible | Some tables syncable, some blocked |
+| Sync Not Recommended | Schema mismatch or no syncable tables |
+| Already In Sync | Data already matches |
+
+Each table row shows a sync icon:
+
+| Icon | Meaning |
+|------|---------|
+| ✓ green (90%+) | Sync should work — source newer than target |
+| ✓ lime (75%) | Schema matches, data differs |
+| ⚠ yellow | Caution — no PK, or target has newer writes |
+| ✗ red | Cannot sync — schema differs or table missing |
+
+Use [`supabase-database-sync`](../supabase-database-sync/README.md) to run `plan` then `sync`.
+
 ## Output
 
 **HTML report (default):** saves to `~/Documents/SupabaseTools/compare_<source>_vs_<target>_<timestamp>.html` and **opens automatically in your browser**. Features:

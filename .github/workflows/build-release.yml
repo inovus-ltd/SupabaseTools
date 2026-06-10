@@ -49,6 +49,7 @@ jobs:
             "supabase-auth-copy/supabase-auth-copy.py:supabase-auth-copy"
             "supabase-secrets-manager/supabase-secrets-manager.py:supabase-secrets-manager"
             "supabase-database-compare/supabase-database-compare.py:supabase-database-compare"
+            "supabase-database-sync/supabase-database-sync.py:supabase-database-sync"
           )
 
           for entry in "${tools[@]}"; do
@@ -129,6 +130,7 @@ jobs:
             supabase-auth-copy-windows.exe restore --project-ref newref --token sbp_xxxx --dir auth_backup_abcdefghijklmnop
             supabase-secrets-manager-windows.exe list --project-ref abcdefghijklmnop --token sbp_xxxx
             supabase-database-compare-windows.exe compare --source-ref sourceref --target-ref targetref --token sbp_xxxx
+            supabase-database-sync-windows.exe plan --source-ref sourceref --target-ref targetref --token sbp_xxxx
             ```
 
             > **Note:** On macOS/Linux, make the binary executable first: `chmod +x supabase-functions-backup-macos`

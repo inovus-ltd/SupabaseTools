@@ -932,6 +932,146 @@ def _compute_similarity(report: dict) -> dict:
     return {"score": round(overall, 1), "tier": tier, "label": label, "categories": categories}
 
 
+def _parse_timestamp(val) -> datetime:
+    if val is None:
+        return None
+    if isinstance(val, datetime):
+        return val if val.tzinfo else val.replace(tzinfo=timezone.utc)
+    s = str(val).strip()
+    if not s or s == "unavailable":
+        return None
+    try:
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        return datetime.fromisoformat(s)
+    except ValueError:
+        return None
+
+
+def _assess_table_sync(
+    table_key: str,
+    report: dict,
+    primary_keys: dict,
+) -> dict:
+    ts = report["tables"]
+    if table_key in ts.get("only_in_source", []):
+        return {
+            "table": table_key, "syncable": False, "confidence": 0, "icon": "red",
+            "reason": "Table missing on target — schema sync required first",
+        }
+    if table_key in ts.get("only_in_target", []):
+        return {
+            "table": table_key, "syncable": False, "confidence": 0, "icon": "red",
+            "reason": "Table not in source — cannot sync data to target",
+        }
+    if any(d["table"] == table_key for d in ts.get("different", [])):
+        return {
+            "table": table_key, "syncable": False, "confidence": 0, "icon": "red",
+            "reason": "Schema differs — data sync would fail or corrupt data",
+        }
+
+    pk_cols = primary_keys.get(table_key) or []
+    data_matches = False
+    data = report.get("data")
+    if data and "matching" in data:
+        data_matches = table_key in data["matching"]
+    elif data and "tables" in data:
+        for t in data["tables"]:
+            if t.get("table") == table_key and t.get("identical"):
+                data_matches = True
+                break
+
+    if not pk_cols:
+        conf, icon = 40, "yellow"
+        reason = "No primary key — upsert unreliable; sync not recommended"
+        return {
+            "table": table_key, "syncable": False, "confidence": conf, "icon": icon,
+            "reason": reason, "primary_key": pk_cols,
+        }
+
+    if data_matches:
+        return {
+            "table": table_key, "syncable": True, "confidence": 95, "icon": "green",
+            "reason": "Already in sync — no action needed", "primary_key": pk_cols,
+        }
+
+    lw = report.get("last_write") or {}
+    src_lw = _parse_timestamp((lw.get("source") or {}).get(table_key, {}).get("last_write_estimate"))
+    tgt_lw = _parse_timestamp((lw.get("target") or {}).get(table_key, {}).get("last_write_estimate"))
+
+    if src_lw and tgt_lw:
+        if src_lw > tgt_lw:
+            return {
+                "table": table_key, "syncable": True, "confidence": 90, "icon": "green",
+                "reason": "Source newer than target — typical snapshot refresh pattern",
+                "primary_key": pk_cols,
+            }
+        if tgt_lw > src_lw:
+            return {
+                "table": table_key, "syncable": True, "confidence": 55, "icon": "yellow",
+                "reason": "Target has newer writes — sync may overwrite newer target data",
+                "primary_key": pk_cols,
+            }
+
+    return {
+        "table": table_key, "syncable": True, "confidence": 75, "icon": "lime",
+        "reason": "Schema matches, data differs — sync should work",
+        "primary_key": pk_cols,
+    }
+
+
+def _assess_sync_feasibility(report: dict) -> dict:
+    primary_keys = report.get("primary_keys") or {}
+    all_tables = sorted(
+        set(report["tables"].get("only_in_source", []))
+        | set(report["tables"].get("only_in_target", []))
+        | set(report["tables"].get("identical", []))
+        | {d["table"] for d in report["tables"].get("different", [])}
+    )
+    table_assessments = {k: _assess_table_sync(k, report, primary_keys) for k in all_tables}
+
+    syncable = [a for a in table_assessments.values() if a["syncable"]]
+    blocked = [a for a in table_assessments.values() if not a["syncable"]]
+    need_sync = [a for a in syncable if a["confidence"] < 95]
+
+    if not table_assessments:
+        overall = {"verdict": "Sync Not Recommended", "tier": "red", "confidence": 0}
+    elif not syncable:
+        overall = {"verdict": "Sync Not Recommended", "tier": "red", "confidence": 0}
+    elif blocked:
+        avg = sum(a["confidence"] for a in syncable) / len(syncable) if syncable else 0
+        overall = {"verdict": "Partial Sync Possible", "tier": "yellow", "confidence": round(avg, 1)}
+    elif need_sync and sum(1 for a in need_sync if a["icon"] in ("green", "lime")) >= len(need_sync) * 0.7:
+        avg = sum(a["confidence"] for a in syncable) / len(syncable)
+        overall = {"verdict": "Sync Recommended", "tier": "green", "confidence": round(avg, 1)}
+    elif need_sync:
+        avg = sum(a["confidence"] for a in syncable) / len(syncable)
+        overall = {"verdict": "Partial Sync Possible", "tier": "yellow", "confidence": round(avg, 1)}
+    else:
+        overall = {"verdict": "Already In Sync", "tier": "green", "confidence": 100}
+
+    return {
+        "overall": overall,
+        "tables": table_assessments,
+        "syncable_count": len(syncable),
+        "blocked_count": len(blocked),
+        "needs_sync_count": len(need_sync),
+    }
+
+
+def _sync_icon_html(assessment: dict) -> str:
+    icons = {"green": "✓", "lime": "✓", "yellow": "⚠", "red": "✗"}
+    icon = icons.get(assessment.get("icon", "red"), "?")
+    tier = assessment.get("icon", "red")
+    conf = assessment.get("confidence", 0)
+    reason = html.escape(assessment.get("reason", ""))
+    syncable = "Yes" if assessment.get("syncable") else "No"
+    return (
+        f'<span class="sync-badge sync-{tier}" title="{reason}">'
+        f'{icon} {conf}%</span>'
+    )
+
+
 def _open_in_browser(path: Path):
     uri = path.resolve().as_uri()
     try:
@@ -947,9 +1087,12 @@ def write_html_report(report: dict) -> str:
     target_ref = report["target_ref"]
     compared_at = report.get("compared_at", "")
     sim = _compute_similarity(report)
+    sync_asm = report.get("sync_assessment") or _assess_sync_feasibility(report)
     esc = lambda v: html.escape(str(v)) if v is not None else "—"
     tier = sim["tier"]
     score = sim["score"]
+    sync_overall = sync_asm["overall"]
+    sync_tables = sync_asm.get("tables", {})
 
     def pill(label, t):
         return f'<span class="pill pill-{t}">{esc(label)}</span>'
@@ -1091,6 +1234,21 @@ def write_html_report(report: dict) -> str:
   .dot-green {{ background: var(--green); }}
   .dot-yellow {{ background: var(--yellow); }}
   .dot-red {{ background: var(--red); }}
+  .sync-hero {{
+    margin-top: 24px; padding: 20px 24px; border-radius: 16px;
+    background: var(--surface2); border: 1px solid var(--hairline);
+  }}
+  .sync-hero h2 {{ font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 8px; font-weight: 600; }}
+  .sync-hero-row {{ display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; }}
+  .sync-badge {{
+    display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px;
+    border-radius: 8px; font-size: 13px; font-weight: 600; cursor: help;
+  }}
+  .sync-green {{ background: var(--green-bg); color: var(--green-text); }}
+  .sync-lime {{ background: var(--lime-bg); color: var(--lime-text); }}
+  .sync-yellow {{ background: var(--yellow-bg); color: var(--yellow-text); }}
+  .sync-red {{ background: var(--red-bg); color: var(--red-text); }}
+  .sync-note {{ font-size: 13px; color: var(--muted); margin-top: 12px; text-align: center; }}
 </style>
 </head>
 <body>
@@ -1112,6 +1270,15 @@ def write_html_report(report: dict) -> str:
       <div class="legend-item"><span class="dot dot-green"></span> Identical / Similar</div>
       <div class="legend-item"><span class="dot dot-yellow"></span> Partially Similar</div>
       <div class="legend-item"><span class="dot dot-red"></span> Different / Not Similar</div>
+    </div>
+    <div class="sync-hero">
+      <h2>Data Sync Prediction</h2>
+      <div class="sync-hero-row">
+        {pill(sync_overall['verdict'], sync_overall['tier'])}
+        <span style="font-size:15px;font-weight:600">{sync_overall['confidence']:.0f}% confidence</span>
+        <span style="font-size:13px;color:var(--muted)">{sync_asm['syncable_count']} syncable · {sync_asm['blocked_count']} blocked · {sync_asm['needs_sync_count']} need sync</span>
+      </div>
+      <p class="sync-note">Use <span class="mono">supabase-database-sync plan</span> then <span class="mono">sync</span> to copy table data from Source → Target</p>
     </div>
   </div>
   <div class="cat-grid">
@@ -1143,11 +1310,19 @@ def write_html_report(report: dict) -> str:
     </div>""")
 
     if ts["only_in_source"] or ts["only_in_target"]:
-        parts.append("<table><thead><tr><th>Status</th><th>Table</th></tr></thead><tbody>")
+        parts.append("<table><thead><tr><th>Sync</th><th>Status</th><th>Table</th></tr></thead><tbody>")
         for t in ts["only_in_source"]:
-            parts.append(f'<tr class="row-red"><td>{pill("Only in Source", "red")}</td><td class="mono">{esc(t)}</td></tr>')
+            sa = sync_tables.get(t, {})
+            parts.append(
+                f'<tr class="row-red"><td>{_sync_icon_html(sa) if sa else ""}</td>'
+                f'<td>{pill("Only in Source", "red")}</td><td class="mono">{esc(t)}</td></tr>'
+            )
         for t in ts["only_in_target"]:
-            parts.append(f'<tr class="row-red"><td>{pill("Only in Target", "red")}</td><td class="mono">{esc(t)}</td></tr>')
+            sa = sync_tables.get(t, {})
+            parts.append(
+                f'<tr class="row-red"><td>{_sync_icon_html(sa) if sa else ""}</td>'
+                f'<td>{pill("Only in Target", "red")}</td><td class="mono">{esc(t)}</td></tr>'
+            )
         parts.append("</tbody></table>")
 
     for entry in ts["different"]:
@@ -1207,7 +1382,8 @@ def write_html_report(report: dict) -> str:
                 f'<td class="mono">{esc(d["slug"])}</td>'
                 f'<td>{esc(", ".join(d["reasons"]))}</td></tr>'
             )
-        parts.append("</tbody></table></div>")
+        parts.append('</tbody></table>')
+        parts.append('<p class="sync-note" style="text-align:left;margin-top:14px">Edge Functions: use <span class="mono">supabase-functions-backup</span> restore — not covered by data sync.</p></div>')
 
     # --- Data ---
     if report.get("data") is not None:
@@ -1220,15 +1396,22 @@ def write_html_report(report: dict) -> str:
             parts.append(f'{pill(dt_lbl, dt_tier)}</div>')
             parts.append(f'<div class="stats"><div class="stat stat-green"><div class="n">{len(data["matching"])}</div><div class="l">Matching</div></div>')
             parts.append(f'<div class="stat stat-red"><div class="n">{len(data["different"])}</div><div class="l">Different</div></div></div>')
-            parts.append("<table><thead><tr><th>Status</th><th>Table</th><th class='th-source'>Source Rows</th><th class='th-target'>Target Rows</th><th>Checksum</th></tr></thead><tbody>")
+            parts.append("<table><thead><tr><th>Sync</th><th>Status</th><th>Table</th><th class='th-source'>Source Rows</th><th class='th-target'>Target Rows</th><th>Checksum</th></tr></thead><tbody>")
             for key in data["matching"]:
-                parts.append(f'<tr class="row-green"><td>{pill("Match", "green")}</td><td class="mono">{esc(key)}</td><td colspan="3">Row count &amp; checksum identical</td></tr>')
+                sa = sync_tables.get(key, {})
+                parts.append(
+                    f'<tr class="row-green"><td>{_sync_icon_html(sa) if sa else ""}</td>'
+                    f'<td>{pill("Match", "green")}</td><td class="mono">{esc(key)}</td>'
+                    f'<td colspan="3">Row count &amp; checksum identical</td></tr>'
+                )
             for d in data["different"]:
                 row_t = "yellow" if d["row_count_match"] else "red"
                 chk_t = "green" if d["checksum_match"] else "red"
                 chk_l = "Match" if d["checksum_match"] else "Mismatch"
+                sa = sync_tables.get(d["table"], {})
                 parts.append(
-                    f'<tr class="row-{row_t}"><td>{pill("Different", row_t)}</td>'
+                    f'<tr class="row-{row_t}"><td>{_sync_icon_html(sa) if sa else ""}</td>'
+                    f'<td>{pill("Different", row_t)}</td>'
                     f'<td class="mono">{esc(d["table"])}</td>'
                     f'<td>{d["source_row_count"]}</td><td>{d["target_row_count"]}</td>'
                     f'<td>{pill(chk_l, chk_t)}</td></tr>'
@@ -1375,16 +1558,23 @@ def do_compare(
         ),
     }
 
+    primary_keys = {}
+    for key in shared_tables:
+        schema, table = _parse_table_key(key)
+        primary_keys[key] = collect_primary_key_columns(api, source_ref, schema, table)
+
     report = {
         "compared_at": datetime.now(timezone.utc).isoformat(),
         "source_ref": source_ref,
         "target_ref": target_ref,
         "schemas": schemas,
         "tables": table_diff,
+        "primary_keys": primary_keys,
         "edge_functions": edge_diff,
         "data": data_diff,
         "last_write": last_write,
     }
+    report["sync_assessment"] = _assess_sync_feasibility(report)
 
     saved_html_path = None
     if output_path:
@@ -1403,7 +1593,10 @@ def do_compare(
         print(json.dumps(report, indent=2, default=str))
     elif fmt == "html":
         sim = _compute_similarity(report)
+        sync_o = report.get("sync_assessment", {}).get("overall", {})
         print(f"\n  Overall similarity: {sim['score']:.0f}/100 — {sim['label']}")
+        if sync_o:
+            print(f"  Sync prediction: {sync_o.get('verdict', '?')} ({sync_o.get('confidence', 0):.0f}% confidence)")
         if saved_html_path and open_browser:
             print("  Opening report in browser...")
             _open_in_browser(saved_html_path)
