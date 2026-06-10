@@ -183,16 +183,26 @@ python supabase-auth-copy.py restore --project-ref newprojectref --token sbp_xxx
 | `SUPABASE_ACCESS_TOKEN` | `--token` | Personal Access Token |
 | `SUPABASE_PROJECT_REF` | `--project-ref` | Project reference ID |
 
+Full setup guide (session vs persistent, Windows/macOS/Linux): [Environment Variables](../README.md#-environment-variables) in the root README.
+
+**Quick reference:**
+
+```powershell
+# PowerShell — current session
+$env:SUPABASE_ACCESS_TOKEN = "sbp_xxxxxxxxxxxx"
+$env:SUPABASE_PROJECT_REF = "abcdefghijklmnop"
+```
+
 ```cmd
-REM Command Prompt
+REM Command Prompt — current session
 set SUPABASE_ACCESS_TOKEN=sbp_xxxxxxxxxxxx
 set SUPABASE_PROJECT_REF=abcdefghijklmnop
 ```
 
-```powershell
-# PowerShell
-$env:SUPABASE_ACCESS_TOKEN="sbp_xxxxxxxxxxxx"
-$env:SUPABASE_PROJECT_REF="abcdefghijklmnop"
+```bash
+# macOS / Linux — current session
+export SUPABASE_ACCESS_TOKEN="sbp_xxxxxxxxxxxx"
+export SUPABASE_PROJECT_REF="abcdefghijklmnop"
 ```
 
 ---

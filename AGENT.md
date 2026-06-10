@@ -476,25 +476,69 @@ python supabase-storage-copy.py restore --project-ref <ref> --token <pat> --serv
 
 ## Environment Variables
 
-All credentials can be passed via flags or environment variables:
+All credentials can be passed via CLI flags or environment variables. Flags take precedence when both are provided.
 
-```cmd
-REM Windows Command Prompt
-set SUPABASE_ACCESS_TOKEN=sbp_xxxxxxxxxxxx
-set SUPABASE_SERVICE_ROLE_KEY=eyJhbGci...
-set SUPABASE_PROJECT_REF=abcdefghijklmnop
-```
+| Variable | Equivalent flag | Scope | Notes |
+|----------|----------------|-------|-------|
+| `SUPABASE_ACCESS_TOKEN` | `--token` | Account-level PAT | Required by all tools |
+| `SUPABASE_PROJECT_REF` | `--project-ref` | Single project ref | Required by all tools |
+| `SUPABASE_SERVICE_ROLE_KEY` | `--service-key` | Project-level | Required only for `supabase-storage-copy` |
+
+Full setup instructions (session vs persistent, all platforms): see root [README.md — Environment Variables](./README.md#-environment-variables).
+
+### Windows — current session
 
 ```powershell
-# Windows PowerShell
-$env:SUPABASE_ACCESS_TOKEN="sbp_xxxxxxxxxxxx"
-$env:SUPABASE_SERVICE_ROLE_KEY="eyJhbGci..."
-$env:SUPABASE_PROJECT_REF="abcdefghijklmnop"
+# PowerShell
+$env:SUPABASE_ACCESS_TOKEN = "sbp_xxxxxxxxxxxx"
+$env:SUPABASE_PROJECT_REF = "abcdefghijklmnop"
+$env:SUPABASE_SERVICE_ROLE_KEY = "eyJhbGci..."
 ```
 
-When environment variables are set, commands reduce to:
+```cmd
+REM Command Prompt
+set SUPABASE_ACCESS_TOKEN=sbp_xxxxxxxxxxxx
+set SUPABASE_PROJECT_REF=abcdefghijklmnop
+set SUPABASE_SERVICE_ROLE_KEY=eyJhbGci...
+```
+
+Verify: PowerShell `echo $env:SUPABASE_ACCESS_TOKEN` · CMD `echo %SUPABASE_ACCESS_TOKEN%`
+
+### Windows — persist across sessions
+
+```powershell
+# User-level (survives reboot; requires new terminal)
+[System.Environment]::SetEnvironmentVariable("SUPABASE_ACCESS_TOKEN", "sbp_xxxxxxxxxxxx", "User")
+[System.Environment]::SetEnvironmentVariable("SUPABASE_PROJECT_REF", "abcdefghijklmnop", "User")
+```
+
+Or add `$env:SUPABASE_ACCESS_TOKEN = "sbp_..."` to the PowerShell profile (`notepad $PROFILE`).
+
+```cmd
+REM setx — applies to new CMD windows only; ~1024 char limit
+setx SUPABASE_ACCESS_TOKEN "sbp_xxxxxxxxxxxx"
+setx SUPABASE_PROJECT_REF "abcdefghijklmnop"
+```
+
+### macOS / Linux — current session
+
+```bash
+export SUPABASE_ACCESS_TOKEN="sbp_xxxxxxxxxxxx"
+export SUPABASE_PROJECT_REF="abcdefghijklmnop"
+export SUPABASE_SERVICE_ROLE_KEY="eyJhbGci..."
+```
+
+Verify: `echo $SUPABASE_ACCESS_TOKEN`
+
+### macOS / Linux — persist across sessions
+
+Add `export` lines to `~/.bashrc`, `~/.bash_profile`, or `~/.zshrc`, then `source` the file.
+
+### Reduced commands when env vars are set
 
 ```cmd
 python supabase-functions-backup.py backup
 python supabase-storage-copy.py backup
+python supabase-auth-copy.py list
+python supabase-secrets-manager.py list
 ```

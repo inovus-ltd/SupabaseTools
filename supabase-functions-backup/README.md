@@ -142,16 +142,26 @@ Set these to avoid passing `--token` and `--project-ref` on every command:
 | `SUPABASE_ACCESS_TOKEN` | Your Personal Access Token (`sbp_...`) |
 | `SUPABASE_PROJECT_REF` | Your project reference ID |
 
+Full setup guide (session vs persistent, Windows/macOS/Linux): [Environment Variables](../README.md#-environment-variables) in the root README.
+
+**Quick reference:**
+
+```powershell
+# PowerShell — current session
+$env:SUPABASE_ACCESS_TOKEN = "sbp_your_token_here"
+$env:SUPABASE_PROJECT_REF = "your-project-ref"
+```
+
 ```cmd
-REM Command Prompt
+REM Command Prompt — current session
 set SUPABASE_ACCESS_TOKEN=sbp_your_token_here
 set SUPABASE_PROJECT_REF=your-project-ref
 ```
 
-```powershell
-# PowerShell
-$env:SUPABASE_ACCESS_TOKEN="sbp_your_token_here"
-$env:SUPABASE_PROJECT_REF="your-project-ref"
+```bash
+# macOS / Linux — current session
+export SUPABASE_ACCESS_TOKEN="sbp_your_token_here"
+export SUPABASE_PROJECT_REF="your-project-ref"
 ```
 
 Once set, commands simplify to:

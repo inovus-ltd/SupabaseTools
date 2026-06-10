@@ -75,6 +75,131 @@ Or go to **Project Settings → General** and it's listed there as "Reference ID
 
 ---
 
+## 🌍 Environment Variables
+
+Instead of passing `--token` and `--project-ref` on every command, store your credentials as environment variables. All four tools read them automatically. If you pass both a flag and an env var, the flag wins.
+
+### Variables
+
+| Variable | Used by | Replaces flag |
+|----------|---------|---------------|
+| `SUPABASE_ACCESS_TOKEN` | All tools | `--token` |
+| `SUPABASE_PROJECT_REF` | All tools | `--project-ref` |
+| `SUPABASE_SERVICE_ROLE_KEY` | `supabase-storage-copy` only | `--service-key` |
+
+### Set your access token
+
+Generate your token first (see [Personal Access Token](#personal-access-token-pat) above), then set `SUPABASE_ACCESS_TOKEN` using one of the options below.
+
+#### Windows — PowerShell (current session)
+
+```powershell
+$env:SUPABASE_ACCESS_TOKEN = "sbp_your_token_here"
+$env:SUPABASE_PROJECT_REF = "abcdefghijklmnop"
+```
+
+These last until you close that PowerShell window.
+
+#### Windows — PowerShell (persist across sessions)
+
+Add to your PowerShell profile (`notepad $PROFILE`), save, and restart PowerShell:
+
+```powershell
+$env:SUPABASE_ACCESS_TOKEN = "sbp_your_token_here"
+$env:SUPABASE_PROJECT_REF = "abcdefghijklmnop"
+```
+
+Or set permanent user-level variables (close and reopen your terminal afterwards):
+
+```powershell
+[System.Environment]::SetEnvironmentVariable("SUPABASE_ACCESS_TOKEN", "sbp_your_token_here", "User")
+[System.Environment]::SetEnvironmentVariable("SUPABASE_PROJECT_REF", "abcdefghijklmnop", "User")
+```
+
+#### Windows — Command Prompt (current session)
+
+```cmd
+set SUPABASE_ACCESS_TOKEN=sbp_your_token_here
+set SUPABASE_PROJECT_REF=abcdefghijklmnop
+```
+
+#### Windows — Command Prompt (persist across sessions)
+
+```cmd
+setx SUPABASE_ACCESS_TOKEN "sbp_your_token_here"
+setx SUPABASE_PROJECT_REF "abcdefghijklmnop"
+```
+
+> `setx` only applies to **new** Command Prompt windows. It has a ~1024 character limit — fine for PATs and project refs, but use the PowerShell or GUI method for long service role keys.
+
+#### Windows — System Settings (GUI)
+
+1. Press **Win + R**, type `sysdm.cpl`, press Enter
+2. **Advanced** tab → **Environment Variables**
+3. Under **User variables**, click **New**
+4. Add `SUPABASE_ACCESS_TOKEN` with your `sbp_...` token
+5. Add `SUPABASE_PROJECT_REF` (and `SUPABASE_SERVICE_ROLE_KEY` if using storage copy)
+6. Open a new terminal
+
+#### macOS / Linux — current session
+
+```bash
+export SUPABASE_ACCESS_TOKEN="sbp_your_token_here"
+export SUPABASE_PROJECT_REF="abcdefghijklmnop"
+```
+
+#### macOS / Linux — persist across sessions
+
+Add the `export` lines to your shell startup file, then reload:
+
+**bash** — `~/.bashrc` (or `~/.bash_profile` on macOS):
+
+```bash
+export SUPABASE_ACCESS_TOKEN="sbp_your_token_here"
+export SUPABASE_PROJECT_REF="abcdefghijklmnop"
+```
+
+```bash
+source ~/.bashrc
+```
+
+**zsh** (default on modern macOS) — `~/.zshrc`:
+
+```bash
+export SUPABASE_ACCESS_TOKEN="sbp_your_token_here"
+export SUPABASE_PROJECT_REF="abcdefghijklmnop"
+```
+
+```bash
+source ~/.zshrc
+```
+
+### Verify the variable is set
+
+| Platform | Command |
+|----------|---------|
+| PowerShell | `echo $env:SUPABASE_ACCESS_TOKEN` |
+| Command Prompt | `echo %SUPABASE_ACCESS_TOKEN%` |
+| macOS / Linux | `echo $SUPABASE_ACCESS_TOKEN` |
+
+You should see your `sbp_...` token. A blank line means the variable is not set in that terminal.
+
+### Simplified commands
+
+Once set, you can omit `--token` and `--project-ref`:
+
+```
+supabase-functions-backup backup
+supabase-auth-copy list
+supabase-secrets-manager list
+```
+
+Storage copy also needs a service role key — set `SUPABASE_SERVICE_ROLE_KEY` the same way, or pass `--service-key` per command when working across two projects.
+
+> 🔒 Session-only variables (`$env:`, `export`, `set`) are cleared when you close the terminal — a good choice on shared machines. Persistent variables are stored on disk; never commit them to git.
+
+---
+
 ## ⚡ Quick Examples
 
 Once installed, here's what you can do. Replace `YOUR_REF` and `YOUR_TOKEN` with your real values.
@@ -351,13 +476,5 @@ git push origin v1.2.0
 ## 🔒 Security Notes
 
 - **Tokens are never stored by these tools** — they're only used for the duration of each command
-- **Never commit your token** to version control — use environment variables instead:
-  ```powershell
-  # PowerShell — set once per session, no need to pass --token every time
-  $env:SUPABASE_ACCESS_TOKEN="sbp_your_token_here"
-  ```
-  ```bash
-  # macOS / Linux
-  export SUPABASE_ACCESS_TOKEN=sbp_your_token_here
-  ```
+- **Never commit your token** to version control — use [environment variables](#-environment-variables) instead
 - **Backups are local** — nothing is sent anywhere except directly to/from your Supabase projects via their official API

@@ -185,19 +185,32 @@ Set these to avoid passing credentials on every command:
 | `SUPABASE_SERVICE_ROLE_KEY` | `--service-key` | Service role key |
 | `SUPABASE_PROJECT_REF` | `--project-ref` | Project reference ID |
 
-**Windows (PowerShell):**
+Full setup guide (session vs persistent, Windows/macOS/Linux): [Environment Variables](../README.md#-environment-variables) in the root README.
+
+**Quick reference:**
+
 ```powershell
-$env:SUPABASE_ACCESS_TOKEN="sbp_xxxxxxxxxxxx"
-$env:SUPABASE_SERVICE_ROLE_KEY="eyJhbGci..."
-$env:SUPABASE_PROJECT_REF="abcdefghijklmnop"
+# PowerShell — current session
+$env:SUPABASE_ACCESS_TOKEN = "sbp_xxxxxxxxxxxx"
+$env:SUPABASE_SERVICE_ROLE_KEY = "eyJhbGci..."
+$env:SUPABASE_PROJECT_REF = "abcdefghijklmnop"
 ```
 
-**Windows (Command Prompt):**
 ```cmd
+REM Command Prompt — current session
 set SUPABASE_ACCESS_TOKEN=sbp_xxxxxxxxxxxx
 set SUPABASE_SERVICE_ROLE_KEY=eyJhbGci...
 set SUPABASE_PROJECT_REF=abcdefghijklmnop
 ```
+
+```bash
+# macOS / Linux — current session
+export SUPABASE_ACCESS_TOKEN="sbp_xxxxxxxxxxxx"
+export SUPABASE_SERVICE_ROLE_KEY="eyJhbGci..."
+export SUPABASE_PROJECT_REF="abcdefghijklmnop"
+```
+
+> When copying storage between projects, use each project's own service role key. Set `SUPABASE_SERVICE_ROLE_KEY` to the key for the project you are working on, or pass `--service-key` per command.
 
 ---
 
